@@ -1,10 +1,12 @@
 import copy
 import multiprocessing
+import os.path
 from functools import partial
 
 from tkinter import *
 
 import numpy as np
+import torch
 from matplotlib import cm
 from matplotlib.patches import Rectangle
 from sklearn import linear_model
@@ -13,6 +15,7 @@ import multiprocessing as mp
 
 from EnergyDataUtil import get_energy_data
 from KnapsackSolver import get_opt_params_knapsack
+from ReLu_DNL.ReLu_DNL import relu_ppo
 from Solver import get_optimization_objective, get_optimal_average_objective_value
 from Utils import get_train_test_split
 from bias_variance_decomp import bias_variance_decomp_pno
@@ -23,7 +26,7 @@ import matplotlib.pyplot as plt
 
 def prepare_icon_dataset(kfold=0, is_shuffle=False):
     dataset = get_energy_data('energy_data.txt', generate_weight=True, unit_weight=False,
-                              kfold=kfold, noise_level=0)
+                              kfold=kfold, noise_level=0, is_sorted=True)
     # combine weights with X first
     # may need to split weights
 
@@ -77,7 +80,7 @@ def scikit_get_regret(model, X, Y, weights, opt_params=None, pool=None):
                                                                        opt_params=opt_params,
                                                                        )
 
-        regret = np.median(optimal_objective_values - objective_values_predicted_items)
+        regret = optimal_objective_values - objective_values_predicted_items
     else:
         map_func = partial(get_regret_worker, opt_params=opt_params)
         iter = zip(Y, pred_Ys, weights)
@@ -241,11 +244,13 @@ def plot_impactful_sets(capacity, kfold, is_shuffle):
 
 
     sorted_benchmarks = copy.deepcopy(Y_test_sets)
-    sorted_regret = sorted(regret)
-    sorted_benchmarks = [x for _, x in sorted(zip(regret,sorted_benchmarks), key=lambda pair: pair[0])]
-    sorted_preds = [x for _, x in sorted(zip(regret,pred_Ys), key=lambda pair: pair[0])]
-    sorted_solutions = [x for _, x in sorted(zip(regret,solutions), key=lambda pair: pair[0])]
-    sorted_predicted_solutions = [x for _, x in sorted(zip(regret,predicted_solutions), key=lambda pair: pair[0])]
+    # sorted_regret = sorted(regret, reverse=True)
+    is_reverse = False
+    sorted_regret = regret
+    sorted_benchmarks = [x for _, x in sorted(zip(sorted_regret,sorted_benchmarks), key=lambda pair: pair[0], reverse=is_reverse)]
+    sorted_preds = [x for _, x in sorted(zip(sorted_regret,pred_Ys), key=lambda pair: pair[0], reverse=is_reverse)]
+    sorted_solutions = [x for _, x in sorted(zip(sorted_regret,solutions), key=lambda pair: pair[0], reverse=is_reverse)]
+    sorted_predicted_solutions = [x for _, x in sorted(zip(sorted_regret,predicted_solutions), key=lambda pair: pair[0], reverse=is_reverse)]
 
     for pred, set, predicted_solution, solution in zip((sorted_preds), (sorted_benchmarks), (sorted_predicted_solutions), (sorted_solutions)):
     # for pred, set, predicted_solution, solution in zip((sorted_preds), (sorted_benchmarks),
@@ -253,13 +258,145 @@ def plot_impactful_sets(capacity, kfold, is_shuffle):
     #                                                        (sorted_solutions)):
         plot_problem_set(pred = pred, Y= set, predicted_solution=predicted_solution, solution=solution)
 
-def plot_problem_set(pred, Y, predicted_solution= None, solution= None):
+def plot_impactful_sets_dnl(capacity, kfold, is_shuffle):
+    train_dict, val_dict, test_dict = prepare_icon_dataset(kfold= kfold, is_shuffle= is_shuffle)
+
+    X_train_sets = train_dict.get("X_sets")
+    Y_train_sets = train_dict.get("Y_sets")
+
+    X_train = train_dict.get("X")
+    Y_train = train_dict.get("Y")
+
+
+    X_test_sets = test_dict.get("X_sets")
+    Y_test_sets = test_dict.get("Y_sets")
+    weights_test_sets = test_dict.get("Weights_sets")
+    X_test = test_dict.get("X")
+    Y_test = test_dict.get("Y")
+
+    mypool = multiprocessing.Pool(processes=8)
+
+    scikit_regression = linear_model.Ridge()
+    scikit_regression.fit(X_train, Y_train)
+    relu_path = os.path.join(os.path.dirname(__file__),'models/dnl.pth')
+    # relu_dnl = relu_ppo()
+    relu_dnl = torch.load(relu_path)
+    relu_dnl.eval()
+
+    opt_param = get_opt_params_knapsack(capacity=capacity)
+    dnl_regret, __, dnl_predicted_solutions, solutions = scikit_get_regret(scikit_regression, X_test_sets, Y_test_sets, weights_test_sets, opt_params=opt_param, pool=mypool)
+
+    relu_regret, relu_test_obj, relu_predicted_solutions, relu_solutions = relu_dnl.get_regret(X_test_sets, Y_test_sets, weights_test_sets, pool=mypool)
+
+    pred_Ys_dnl = []
+    pred_Ys_relu = []
+    for x in X_test_sets:
+        pred_Ys_dnl.append(scikit_regression.predict(x))
+        pred_Ys_relu.append(relu_dnl.predict(x))
+
+
+    sorted_benchmarks = copy.deepcopy(Y_test_sets)
+    # sorted_regret = sorted(regret, reverse=True)
+    is_reverse = True
+
+    # regret
+    #
+    regret = relu_regret - dnl_regret
+    sorted_regret = regret
+    print("regret1",np.median(relu_regret) - np.median(dnl_regret))
+    print("regret2",np.median(regret))
+
+    sorted_benchmarks = [x for _, x in sorted(zip(sorted_regret,sorted_benchmarks), key=lambda pair: pair[0], reverse=is_reverse)]
+    sorted_preds_dnl = [x for _, x in sorted(zip(sorted_regret,pred_Ys_dnl), key=lambda pair: pair[0], reverse=is_reverse)]
+    sorted_preds_relu = [x for _, x in
+                        sorted(zip(sorted_regret, pred_Ys_relu), key=lambda pair: pair[0], reverse=is_reverse)]
+
+
+
+    sorted_predicted_solutions_dnl = [x for _, x in sorted(zip(sorted_regret,dnl_predicted_solutions), key=lambda pair: pair[0], reverse=is_reverse)]
+
+    sorted_predicted_solutions_relu = [x for _, x in sorted(zip(sorted_regret,relu_predicted_solutions), key=lambda pair: pair[0], reverse=is_reverse)]
+
+    sorted_solutions = [x for _, x in
+                        sorted(zip(sorted_regret, solutions), key=lambda pair: pair[0], reverse=is_reverse)]
+
+    sorted_regret = [x for _, x in
+                         sorted(zip(sorted_regret, sorted_regret), key=lambda pair: pair[0], reverse=is_reverse)]
+
+    print(sorted_regret)
+
+
+    plot_std_vs_regret(sorted_regret, sorted_preds_dnl,sorted_preds_relu, sorted_benchmarks, sorted_predicted_solutions_dnl, sorted_predicted_solutions_relu, sorted_solutions)
+
+    for pred_dnl, pred_relu,  Y, predicted_solution_dnl,predicted_solution_relu, solution in zip((sorted_preds_dnl),(sorted_preds_relu), (sorted_benchmarks), (sorted_predicted_solutions_dnl), (sorted_predicted_solutions_relu), (sorted_solutions)):
+    # for pred, set, predicted_solution, solution in zip((sorted_preds), (sorted_benchmarks),
+    #                                                        (sorted_predicted_solutions),
+    #                                                        (sorted_solutions)):
+        plot_problem_set(pred_dnl = pred_dnl,pred_relu=pred_relu, Y= Y, predicted_solution_dnl=predicted_solution_dnl, predicted_solution_relu=predicted_solution_relu,
+                         solution=solution)
+
+def plot_std_vs_regret(sorted_regret, sorted_preds_dnl,sorted_preds_relu, sorted_benchmarks, sorted_predicted_solutions_dnl, sorted_predicted_solutions_relu, sorted_solutions):
+    dnl_std = []
+    relu_std = []
+    normal_std = []
+
+    for pred_dnl, pred_relu, Y, predicted_solution_dnl, predicted_solution_relu, solution in zip((sorted_preds_dnl),
+                                                                                                 (sorted_preds_relu),
+                                                                                                 (sorted_benchmarks), (
+                                                                                                 sorted_predicted_solutions_dnl),
+                                                                                                   (
+                                                                                                 sorted_predicted_solutions_relu),
+                                                                                                 (sorted_solutions)):
+        dnl_std.append(np.std((pred_dnl)[:,0])/np.mean((pred_dnl)[:,0]))
+        relu_std.append(np.std((pred_relu)[:,0])/np.mean((pred_relu)[:,0]))
+        normal_std.append(np.std(Y)/np.mean(Y))
+
+
+
+    alpha = 0.5
+    fig = plt.figure()
+    ax = plt.gca()
+    std_diff = [x -y for x,y in zip(relu_std,dnl_std)]
+    plt.scatter(sorted_regret, y=normal_std, alpha=alpha, c='b')
+    plt.scatter(sorted_regret, y=dnl_std, alpha=alpha, c='r')
+    plt.scatter(sorted_regret, y=relu_std, alpha=alpha, c='y')
+
+
+    z = np.polyfit(sorted_regret, normal_std, 1)
+    p = np.poly1d(z)
+    plt.plot(sorted_regret, p(sorted_regret), "b-")
+
+
+    z = np.polyfit(sorted_regret, dnl_std, 1)
+    p = np.poly1d(z)
+    plt.plot(sorted_regret, p(sorted_regret), "r-")
+
+    z = np.polyfit(sorted_regret, relu_std, 1)
+    p = np.poly1d(z)
+    plt.plot(sorted_regret, p(sorted_regret), "y-")
+
+    # plt.scatter(sorted_regret, y=dnl_std, alpha=alpha, c='r')
+    # plt.scatter(sorted_regret, y=relu_std, alpha=alpha, c='y')
+
+    # ax.set_title("dnl: {}, relu: {}".format(sum(Y[predicted_solution_dnl]),sum(Y[predicted_solution_relu])))
+    # ax.legend(['true', 'reg', 'dnl'])
+    ax.legend(['true', 'reg', 'dnl'])
+
+
+    plt.figure()
+    counts, bins = np.histogram(sorted_regret)
+    plt.stairs(counts, bins)
+    print('regret', np.mean(sorted_regret))
+    plt.show()
+
+def plot_problem_set(pred_dnl,pred_relu, Y, predicted_solution_dnl= None, predicted_solution_relu= None,solution= None):
     index = [i for i in range(len(Y))]
     alpha = 0.5
     fig = plt.figure()
     ax = plt.gca()
     plt.scatter(index, y=Y, alpha=alpha, c='b')
-    plt.scatter(index, y=pred, alpha=alpha, c='r')
+    plt.scatter(index, y=pred_dnl, alpha=alpha, c='r')
+    plt.scatter(index, y=pred_relu, alpha=alpha, c='y')
     rectangle_width = 1
     rectange_height = 50
     width_offset = rectangle_width / 2
@@ -267,10 +404,20 @@ def plot_problem_set(pred, Y, predicted_solution= None, solution= None):
     if solution is not None:
         for item in solution:
             ax.add_patch(Rectangle((int(item) - width_offset, Y[int(item)] - height_offset), rectangle_width, rectange_height , facecolor="b", alpha=alpha))
-    if predicted_solution is not None:
-        for item in predicted_solution:
-            ax.add_patch(Rectangle((int(item) - width_offset, Y[int(item)] - height_offset), rectangle_width, rectange_height, facecolor="r",alpha=alpha))
+    if predicted_solution_dnl is not None:
+        for item in predicted_solution_dnl:
+            ax.add_patch(Rectangle((int(item) - width_offset, pred_dnl[int(item)] - height_offset), rectangle_width, rectange_height, facecolor="r",alpha=alpha))
+
+    if predicted_solution_relu is not None:
+        for item in predicted_solution_relu:
+            ax.add_patch(Rectangle((int(item) - width_offset, pred_relu[int(item)] - height_offset), rectangle_width, rectange_height, facecolor="y",alpha=alpha))
+    ax.set_title("dnl: {}, relu: {}".format(sum(Y[predicted_solution_dnl]),sum(Y[predicted_solution_relu])))
+    ax.legend(['true', 'reg', 'dnl'])
+    # print("objective: {}, pred: {}".format(sum(Y[solution]),sum(Y[predicted_solution])))
+
     plt.show()
+
+
 
 
 if __name__ == "__main__":
@@ -282,5 +429,4 @@ if __name__ == "__main__":
 
     # bias_variance_sets(capacities, kfold=1, is_shuffle=True)
 
-
-    plot_impactful_sets(capacity=12, kfold=0, is_shuffle=False)
+    plot_impactful_sets_dnl(capacity=12, kfold=0, is_shuffle=True)

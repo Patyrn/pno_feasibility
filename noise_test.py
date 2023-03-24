@@ -122,7 +122,7 @@ def noise_test_incremental(capacities=None, n_iter=100, kfold=0, noise_start=50,
     if capacities is None:
         capacities = [12, 24, 48, 72, 96, 120, 144, 168, 196, 220]
     dataset = get_energy_data('energy_data.txt', generate_weight=True, unit_weight=False,
-                              kfold=kfold, noise_level=0)
+                              kfold=kfold, noise_level=0, sorted=True)
     problem_sets = dataset.get('benchmarks_Y')
     weights_sets = dataset.get('benchmarks_weights')
     noise_range = range(noise_start, noise_end + 1, noise_step)

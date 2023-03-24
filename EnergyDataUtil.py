@@ -6,7 +6,7 @@ from Utils import read_file, get_benchmarks, get_benchmarks_spotree
 
 BENCHMARK_SIZE = 48
 
-def get_energy_data(filename, generate_weight = True, unit_weight = True,kfold=0, noise_level = 0, is_spo_tree=False):
+def get_energy_data(filename, generate_weight = True, unit_weight = True, is_sorted = False, kfold=0, noise_level = 0, is_spo_tree=False, ):
     """
     Reads the energy dataset with the filename, splits it into feature and output sets.
     :param filename:
@@ -16,11 +16,11 @@ def get_energy_data(filename, generate_weight = True, unit_weight = True,kfold=0
     dir_path = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(dir_path,'data',filename)
     data = read_file(file_path)
-    dataset = transform_energy_data(data, HEADER_LENGTH, generate_weight, unit_weight,kfold,noise_level=noise_level, is_spo_tree=is_spo_tree)
+    dataset = transform_energy_data(data, HEADER_LENGTH, generate_weight, unit_weight,is_sorted = is_sorted,kfold= kfold,noise_level=noise_level, is_spo_tree=is_spo_tree)
     return dataset
 
 
-def transform_energy_data(data, header_length, generate_weight=True, unit_weight = True,kfold=0,noise_level=0,is_spo_tree=False):
+def transform_energy_data(data, header_length, generate_weight=True, unit_weight = True,is_sorted = False,kfold=0,noise_level=0,is_spo_tree=False):
     """
     transform method for energy data. Takes raw file and splits it into features and labels.
     For the energy data, first feature is actually the benchmark No
@@ -55,7 +55,7 @@ def transform_energy_data(data, header_length, generate_weight=True, unit_weight
     if is_spo_tree:
         dataset = get_benchmarks_spotree(X,Y, BENCHMARK_SIZE, generate_weight, unit_weight, weight_seed,noise_level=noise_level)
     else:
-        dataset = get_benchmarks(X,Y, BENCHMARK_SIZE, generate_weight, unit_weight, weight_seed,noise_level=noise_level)
+        dataset = get_benchmarks(X,Y, BENCHMARK_SIZE, generate_weight, unit_weight, weight_seed= weight_seed, is_sorted = is_sorted,noise_level=noise_level)
 
     # dataset = {'X': X,
     #            'Y': Y}

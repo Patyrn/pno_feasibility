@@ -99,10 +99,10 @@ class PredictPlusOptModel:
         prev_profit = -10
         model_params = {'alphas': self.alphas,
                         'const': self.const}
-        profit = np.median(get_optimization_objective(X=train_X, Y=train_Y, weights=train_weights,
+        profit = np.mean(get_optimization_objective(X=train_X, Y=train_Y, weights=train_weights,
                                                       opt_params=self.opt_params, model_params=model_params))
-        test_regret = np.median(self.get_regret(test_X, test_Y, test_weights))
-        val_regret = np.median(self.get_regret(val_X, val_Y, val_weights))
+        test_regret = np.mean(self.get_regret(test_X, test_Y, test_weights))
+        val_regret = np.mean(self.get_regret(val_X, val_Y, val_weights))
         self.test_regrets.append(test_regret)
         self.training_obj_value.append(profit)
         self.run_time.append(0)
@@ -144,7 +144,7 @@ class PredictPlusOptModel:
                 train_X = mini_batch_X
                 train_Y = mini_batch_Y
                 train_weights = mini_batch_weights
-                profit = np.median(get_optimization_objective(X=train_X, Y=train_Y, weights=train_weights,
+                profit = np.mean(get_optimization_objective(X=train_X, Y=train_Y, weights=train_weights,
                                                               opt_params=self.opt_params, model_params=model_params))
                 # cut for minibatch
 
@@ -229,14 +229,14 @@ class PredictPlusOptModel:
                     if self.mini_batch_size == -1:
                         if self.is_val:
                             # print('val')
-                            val_regret = np.median(self.get_regret(val_X, val_Y, val_weights, pool=mypool))
+                            val_regret = np.mean(self.get_regret(val_X, val_Y, val_weights, pool=mypool))
                             self.val_regrets.append(val_regret)
                         test_run_time = time.time()
                         if print_test:
                             # print('test')
-                            test_regret = np.median(self.get_regret(test_X, test_Y, test_weights, pool=mypool))
+                            test_regret = np.mean(self.get_regret(test_X, test_Y, test_weights, pool=mypool))
                             self.test_regrets.append(test_regret)
-                            train_regret = np.median(self.get_regret(train_X, train_Y, train_weights, pool=mypool))
+                            train_regret = np.mean(self.get_regret(train_X, train_Y, train_weights, pool=mypool))
                             self.training_obj_value.append(train_regret)
                             if self.verbose:
                                 print('updating parameter', k, 'test regret', test_regret)
@@ -256,14 +256,14 @@ class PredictPlusOptModel:
                     # Record data after each batch for mini batches
                     if self.is_val:
                         # print('val')
-                        val_regret = np.median(self.get_regret(val_X,val_Y,val_weights,pool=mypool))
+                        val_regret = np.mean(self.get_regret(val_X,val_Y,val_weights,pool=mypool))
                         self.val_regrets.append(val_regret)
                     test_run_time = time.time()
                     if (print_test):
                         # print('test')
-                        test_regret = np.median(self.get_regret(test_X, test_Y, test_weights,pool=mypool))
+                        test_regret = np.mean(self.get_regret(test_X, test_Y, test_weights,pool=mypool))
                         self.test_regrets.append(test_regret)
-                        train_regret = np.median(self.get_regret(train_X, train_Y, train_weights,pool=mypool))
+                        train_regret = np.mean(self.get_regret(train_X, train_Y, train_weights,pool=mypool))
                         self.training_obj_value.append(train_regret)
                         if self.verbose:
                             print('updating parameter', k, 'test regret', test_regret)
@@ -314,7 +314,7 @@ class PredictPlusOptModel:
             # print('true obj', np.sum(optimal_average_objective_value))
             # print(optimal_average_objective_value - average_objective_value_with_predicted_items)
             # print('true obj', np.sum(optimal_average_objective_value))
-            regret = np.median(optimal_average_objective_value - average_objective_value_with_predicted_items)
+            regret = np.mean(optimal_average_objective_value - average_objective_value_with_predicted_items)
             # print('regret', regret)
             # print(regret)
 
@@ -327,7 +327,7 @@ class PredictPlusOptModel:
             # print('optimal_average_objective_value', objective_values_predicted_items)
             # print('average_objective_value_with_predicted_items', optimal_objective_values)
             print(np.mean(np.concatenate(optimal_objective_values)))
-            regret = np.median(np.concatenate(optimal_objective_values) - np.concatenate(objective_values_predicted_items))
+            regret = np.mean(np.concatenate(optimal_objective_values) - np.concatenate(objective_values_predicted_items))
             # print('true obj',np.sum(np.concatenate(optimal_objective_values)))
         self.test_regret = regret
         return regret
@@ -416,7 +416,7 @@ def find_the_best_transition_point_benchmarks_worker(transition_point_x, train_X
     alphas[k, 0] = transition_point_x
     model_params['alphas'] = alphas
 
-    average_profit = np.median(get_optimization_objective(X=train_X, Y=train_Y,
+    average_profit = np.mean(get_optimization_objective(X=train_X, Y=train_Y,
                                                           weights=train_weights, opt_params=opt_params,
                                                           model_params=model_params))
     # print('k: ' + str(k) + ' transition_point: ' + str(transition_point_x) + ' profit: ' + str(average_profit))
@@ -480,7 +480,7 @@ def initialize_parameters(X,Y):
 def clean_transition_points(transition_points, benchmark_X, benchmark_Y, weights, opt_params, model_params,
                             current_alpha):
     cleaner_transition_points = set()
-    base_profit = np.median(Solver.get_optimization_objective(X=[benchmark_X], Y=[benchmark_Y], weights=weights,
+    base_profit = np.mean(Solver.get_optimization_objective(X=[benchmark_X], Y=[benchmark_Y], weights=weights,
                                                               model_params=model_params, opt_params=opt_params))
 
     for transition_point in transition_points:

@@ -5,6 +5,7 @@ import torch
 from ortools.algorithms import pywrapknapsack_solver
 
 from Params import KNAPSACK
+from PredictPlustOptimizeUtils import compute_C_k, compute_F_k
 
 
 
@@ -76,39 +77,38 @@ def compute_profit_knapsack_pred(pred_Y,Y,weights,opt_params):
     profits = np.zeros(len(Y))
     solutions = []
     index = range(len(Y))
-    for i, benchmark_pred_Y, benchmark_Y, benchmark_weights in zip(index, pred_Y, Y, weights):
-        profit,items = compute_profit_pred_y(benchmark_pred_Y=benchmark_pred_Y, benchmark_Y=benchmark_Y,
+    for i, benchmark_pred_Y, benchmark_Y, benchmark_weights in zip(index, pred_Y, Y, weights, ):
+        profit, solution = compute_profit_pred_y(benchmark_pred_Y=benchmark_pred_Y, benchmark_Y=benchmark_Y,
                                               weights=benchmark_weights, capacity=capacity)
         profits[i] = profit
-        solutions.append(items)
+        solutions.append(solution)
 
-    return profits,solutions
+    return profits, solutions
 
 def compute_profit_pred_y(benchmark_pred_Y, benchmark_Y, weights, capacity):
-    profit_alpha_k, __, items = compute_profit_knapsack_single_benchmark(benchmark_pred_Y, benchmark_Y, weights, capacity)
-    return profit_alpha_k, items
+    profit_alpha_k, __, predicted_solution = compute_profit_knapsack_single_benchmark(benchmark_pred_Y, benchmark_Y, weights, capacity)
+    return profit_alpha_k, predicted_solution
 
 def compute_profit_static_alphas(benchmark_X, benchmark_Y, weights, capacity, alphas, const):
     F_k = compute_C_k(benchmark_X, alphas, const, isSampling=False)
-    profit_alpha_k, __, __ = compute_profit_knapsack_single_benchmark(F_k, benchmark_Y, weights, capacity)
+    profit_alpha_k, __, predicted_solution = compute_profit_knapsack_single_benchmark(F_k, benchmark_Y, weights, capacity)
 
-    return profit_alpha_k
+    return profit_alpha_k, predicted_solution
 
 
 def compute_optimal_average_value_knapsack(Y, weights, opt_params):
     capacity = opt_params.get('capacity')
     objective_values = np.zeros(len(Y))
-    solutions = []
     index =  range(len(Y))
+    solutions = []
     for i, benchmark_Y, benchmark_weights in zip(index, Y, weights):
         benchmark_Y = benchmark_Y.reshape(-1).tolist()
         benchmark_weights = benchmark_weights.reshape(-1).tolist()
 
         optimal_objective_value, predicted_opt_items = knapsack_solver(benchmark_Y, [benchmark_weights],
                                                                        capacity)
-        solutions.append(predicted_opt_items)
         objective_values[i] = calculate_profit_from_items(predicted_opt_items, benchmark_Y)
-
+        solutions.append(predicted_opt_items)
         # solution = solveKnapsackProblem(benchmark_Y, [benchmark_weights], capacity, warmstart=None)
         # predicted_opt_items = np.asarray(solution['assignments'])
         # objective_values[i] = np.sum(benchmark_Y * predicted_opt_items)

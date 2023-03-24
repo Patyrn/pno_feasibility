@@ -360,7 +360,7 @@ def flatten_benchmarks(benchmarks):
     return flattened_np_array
 
 
-def get_benchmarks(X, Y, benchmark_size, generate_weight=True, unit_weight=True, is_sorted = False, weight_seed=None, add_weights=False,noise_level=0):
+def get_benchmarks(X, Y, benchmark_size, generate_weight=True, unit_weight=True, weight_seed=None, add_weights=False,noise_level=0):
     """
     Splits the dataset into benchmarks of a certain size for the optimization problem. Used in the second stage.
     Might not be used in the feature if we choose to use predetermined benchmarks.
@@ -416,18 +416,13 @@ def get_benchmarks(X, Y, benchmark_size, generate_weight=True, unit_weight=True,
             Y[:, start_index:end_index] = Y[:, start_index:end_index] * benchmark_noisy_weights
             weights[:, start_index:end_index] = benchmark_weights
             noisy_weights[:, start_index:end_index] = benchmark_noisy_weights
-            benchmark_X = np.vstack((benchmark_X, benchmark_noisy_weights.flatten()))
+            benchmark_X = np.vstack((benchmark_X, benchmark_noisy_weights   .flatten()))
 
         else:
             benchmark_weights = weights[:, start_index:end_index].reshape(1, benchmark_size)
 
         benchmark_Y = Y[:, start_index:end_index].reshape(benchmark_size, 1)
 
-        if is_sorted:
-            sorting_ind = list(range(0,benchmark_Y.size))
-            sorting_ind = [x for _,x in sorted(zip(benchmark_Y,sorting_ind))]
-            benchmark_Y = benchmark_Y[sorting_ind]
-            benchmark_X = benchmark_X[:,sorting_ind]
         benchmarks_X.append(benchmark_X.T)
         benchmarks_Y.append(benchmark_Y)
         benchmarks_weights.append(benchmark_weights)
