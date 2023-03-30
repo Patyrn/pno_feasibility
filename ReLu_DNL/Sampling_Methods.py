@@ -20,6 +20,7 @@ This file contains the Sampler object and functions related to compute optimizat
 DIVIDE_AND_CONQUER = 'DIVIDE_AND_CONQUER'
 DIVIDE_AND_CONQUER_MAX = 'DIVIDE_AND_CONQUER_MAX'
 DIVIDE_AND_CONQUER_GREEDY = 'DIVIDE_AND_CONQUER_GREEDY'
+DIVIDE_AND_CONQUER_GREEDY_MERGED = 'DIVIDE_AND_CONQUER_GREEDY_MERGED'
 
 EXHAUSTIVE = 'EXHAUSTIVE'
 EXHAUSTIVE_MAX = 'EXHAUSTIVE_MAX'
@@ -526,6 +527,264 @@ class Sampler:
         param_runtime = runtime_param_ind(runtime, param.layer_no, param.param_ind, param.bias, update_count = param.update_count)
         heapq.heappush(self.greedy_run_times, param_runtime)
 
+    def divide_and_conquer_greedy_search_merged(self, benchmarks_x, benchmarks_y, weights, param, model, layer_no=None,
+                                         profit=-20, bias=False):
+        """
+             This methods approaches the transition point search from a divide and conquer approach. Same as the vanilla divide and conquer method,
+             but stops at the first transition point which improves the current profit
+
+
+             :param alphas: parameters of the model
+             :param k: the index of the parameter that is optimized
+             :param const: constant of the model
+             :param train_X: test set features
+             :param train_Y: test set profits
+             :param train_weights: test set weights
+             :param capacities: capacity of the problem
+
+             :return: item_sets(list): list of item sets, transition_points: a list of transition points,
+             predicted_profits(list): predicted profits of the sampling points
+             profits(list): true profits of the sampling points
+             sample_space(list): all sample points
+             IMPORTANT: The lists are 2d lists. Assume a list(M,N) where M is the iterations and N is the sample points.
+             To get the final results you would look for list(m,:).
+             """
+        """
+               This methods approaches the transition point search from an exhaustive approach. The sample size is bounded
+               by max_step_size_magnitude. Step size is determined by min_step_size_magnitude. Each sample point is used
+               for profit calculations. And then these profits and sample points are used to extract transition points.
+    
+    
+               :param alphas: parameters of the model
+               :param k: the index of the parameter that is optimized
+               :param const: constant of the model
+               :param train_X: test set features
+               :param train_Y: test set profits
+               :param train_weights: test set weights
+               :param capacities: capacity of the problem
+    
+               :return: item_sets(list): list of item sets, transition_points: a list of transition points,
+               predicted_profits(list): predicted profits of the sampling points
+               profits(list): true profits of the sampling points
+               sample_space(list): all sample points
+               IMPORTANT: The lists are 2d lists. Assume a list(M,N) where M is the iterations and N is the sample points.
+               To get the final results you would look for list(m,:).
+               """
+        # print(param_ind)
+        copy_time = time.time()
+        temp_model = copy.deepcopy(model)
+        copy_finish = time.time() - copy_time
+        sampling_time = time.time()
+        # if self.greedy_run_times is None:
+        #     # first_layer_run_time_array = np.zeros(
+        #     #     (temp_model.get_layer(1).out_features, temp_model.get_layer(1).in_features))
+        #     # second_layer_run_time_array = np.zeros((temp_model.get_layer(2).out_features,
+        #     #                                         temp_model.get_layer(2).in_features))
+        #     # self.greedy_run_times = [first_layer_run_time_array, second_layer_run_time_array]
+        #     array = [runtime_param_ind(runtime=0, layer_no=layer_no, param_ind=(i, j)) for
+        #              layer_no in [1, 2] for i in
+        #              range(temp_model.get_layer(layer_no).in_features) for j in range(temp_model.get_layer(layer_no).out_features)]
+        #     heapq.heapify(array)
+        #     self.greedy_run_times = array
+
+        if bias:
+            current_param = temp_model.get_layer(layer_no).bias[param.param_ind].detach().numpy()
+        else:
+            current_param = temp_model.get_layer(layer_no).weight[param.param_ind].detach().numpy()
+        # print("dnc param: {}".format(current_param))
+        start_ind = current_param - abs(current_param) * 10
+        end_ind = current_param + abs(current_param) * 10
+
+        M = math.ceil(math.log(10 ** (self.max_step_size_magnitude - self.min_step_size_magnitude),
+                               self.step_size_divider)) + 1
+
+        # Initialize first sample range parameters
+        # print("before initialize current_param: {}, type: {}".format(current_param,current_param.shape))
+
+        if current_param != 0:
+            # print("min_step_size value should be", abs(current_param * (10 ** self.min_step_size_magnitude)))
+            min_step_size = abs(current_param * (10 ** self.min_step_size_magnitude))
+            # print("min_step_size value should is", min_step_size)
+            sample_range = abs(current_param * SAMPLE_RANGE_MULTIPLIER * (10 ** self.max_step_size_magnitude))
+            # print('in if, min_step_size: {}, sample_range: {}'.format(min_step_size, sample_range))
+        else:
+            sample_range = abs(1 * SAMPLE_RANGE_MULTIPLIER * (10 ** self.max_step_size_magnitude))
+            min_step_size = 1 * (10 ** self.min_step_size_magnitude)
+            # print('in else, min_step_size: {}, sample_range: {}'.format(min_step_size, sample_range))
+        interval_mid_point = current_param
+        interval_start = interval_mid_point - sample_range / 2
+        interval_end = interval_mid_point + sample_range / 2
+        # Initialize lists
+        sample_spaces = [[] for i in range(M)]
+        POVS = [[] for i in range(M)]
+        TOVS = [[] for i in range(M)]
+        transition_intervals = [[] for i in range(M)]
+        intervals = [[] for i in range(M + 1)]
+
+        intervals[0] = [Interval(TransitionPoint(interval_start, 0, 0), TransitionPoint(interval_end, 0, 0))]
+        final_intervals = []
+        iteration = 0
+        greedy_sampling_time = time.time()
+        for i in range(M):
+            for interval_no, interval in enumerate(intervals[i]):
+
+                iteration += 1
+                start_index = interval.starting_point.x
+
+                end_index = interval.ending_point.x
+                sample_size = self.step_size_divider + 1
+                # print("M: {}, Interval: {} Start: {}, End {}".format(M, i, start_index, end_index))
+                step_size = abs(end_index - start_index) / self.step_size_divider
+
+                if step_size > min_step_size:
+                    # print('start index:', start_index, "step size:", step_size)
+                    sample_space = [start_index + step_size * j for j in range(sample_size)]
+                    # print("sample space", sample_space)
+                    # if round(end_index, 3) > round(sample_space[-1], 3):
+                    #     sample_space[-1] = end_index
+                    sample_spaces[i].extend(sample_space)
+                    # compute the profits of the sample points
+                    if i == 0:
+                        benchmark_TOVS, benchmark_POVS, __, pred_ys = get_optimization_objective_for_samples(
+                            benchmark_x,
+                            benchmark_y,
+                            weights,
+                            sample_space,
+                            param.param_ind,
+                            temp_model, layer_no, bias)
+                        # initialize profit to the profit with the current value, may cache it to increase speed
+                        profit = benchmark_TOVS[1]
+                        original_param = TransitionPoint(x=sample_space[1], true_profit=profit,
+                                                         predicted_profit=benchmark_POVS[1])
+                    else:
+                        # cache previous sample solutions
+                        benchmark_TOVS, benchmark_POVS, __, pred_ys = get_optimization_objective_for_samples(
+                            benchmark_x,
+                            benchmark_y,
+                            weights,
+                            sample_space[1:-1],
+                            param.param_ind,
+                            temp_model, layer_no, bias)
+
+                        benchmark_TOVS = np.hstack(
+                            (interval.starting_point.true_profit, benchmark_TOVS, interval.ending_point.true_profit))
+
+                        benchmark_POVS = np.hstack((interval.starting_point.predicted_profit, benchmark_POVS,
+                                                    interval.ending_point.predicted_profit))
+
+                    if max(benchmark_TOVS) > profit:
+                        index = np.argmax(benchmark_TOVS)
+                        transition_point = TransitionPoint(x=sample_space[index], true_profit=benchmark_TOVS[index],
+                                                           predicted_profit=benchmark_POVS[index])
+                        transition_points = [transition_point]
+                        greedy_sampling_end_time = time.time() - greedy_sampling_time
+                        # print("GOOD POINT greedy_sampling_end_time:", round(greedy_sampling_end_time, 6), "iteration: ", iteration)
+                        sampling_time = time.time() - sampling_time
+                        # print("sampling_end_time:", round(sampling_time, 6), "copy time:", copy_finish, "iteration: ",
+                        #       iteration)
+                        return transition_points, final_intervals, sample_spaces[-1], POVS[-1], TOVS[
+                            -1], greedy_sampling_end_time
+
+                    greedy_sampling_end_time = time.time() - greedy_sampling_time
+                    if greedy_sampling_end_time > param.runtime * RUN_TIME_CONSTANT:
+                        transition_points = [original_param]
+                        # print("TIMEOUT greedy_sampling_end_time:", round(greedy_sampling_end_time, 6), "iteration: ", iteration)
+                        sampling_time = time.time() - sampling_time
+                        # print("sampling_end_time:", round(sampling_time, 6), "copy time:", (copy_finish),
+                        # "iteration: ", iteration)
+                        return transition_points, final_intervals, sample_spaces[-1], POVS[-1], TOVS[
+                            -1], greedy_sampling_end_time
+
+                    this_transition_intervals, dead_intervals = find_transition_intervals(sample_space, benchmark_POVS,
+                                                                                          benchmark_TOVS)
+                    transition_intervals[i].extend(this_transition_intervals)
+                    intervals[i + 1] = transition_intervals[i]
+                    POVS[i].extend(benchmark_POVS)
+                    TOVS[i].extend(benchmark_TOVS)
+                else:
+                    final_intervals.append(interval)
+                    greedy_sampling_end_time = time.time() - greedy_sampling_time
+
+                    if greedy_sampling_end_time > param.runtime * RUN_TIME_CONSTANT:
+                        transition_points = [original_param]
+                        # print("TIMEOUT greedy_sampling_end_time:", round(greedy_sampling_end_time, 6), "iteration: ", iteration)
+                        sampling_time = time.time() - sampling_time
+                        # print("sampling_end_time:", round(sampling_time, 6), "copy time:", (copy_finish), "iteration: ",
+                        #       iteration)
+                        return transition_points, final_intervals, sample_spaces[-1], POVS[-1], TOVS[
+                            -1], greedy_sampling_end_time
+                    # decision_policies.append(predicted_opt_items)
+        greedy_sampling_end_time = time.time() - greedy_sampling_time
+        # print("greedy_sampling_end_time:", round(greedy_sampling_end_time, 6), "iteration: ", iteration)
+        transition_points = [original_param]
+        # # Debugging plots
+        # print("NUmber of transition points:", len(transition_points))
+        # debug_number_of_samples = 10**(self.max_step_size_magnitude - self.min_step_size_magnitude)
+        # debug_step_size = (interval_end - interval_start) / debug_number_of_samples
+        # debug_samples = [interval_start + x*debug_step_size for x in range(debug_number_of_samples)]
+        # debug_benchmark_TOVS, debug_benchmark_POVS, __, debug_pred_ys = get_optimization_objective_for_samples(
+        #                     benchmark_x,
+        #                     benchmark_y,
+        #                     weights,
+        #                     debug_samples,
+        #                     param_ind,
+        #                     temp_model, layer_no)
+        #
+        # plt.scatter(debug_samples, debug_benchmark_TOVS)
+        # plt.scatter(current_param, transition_points[0].true_profit, c='r')
+        # for transition_point in transition_points:
+        #     plt.scatter(transition_point.x, transition_point.true_profit)
+        # plt.show()
+        #     plt.subplot(M, 2, 2 * i + 1)
+        #     plt.xlim([interval_start, interval_end])
+        #     plt.scatter(sample_spaces[i], POVS[i])
+        #     # for transition_point in transition_points:
+        #     #     plt.scatter((transition_point.starting_point.x + transition_point.ending_point.x) * 0.5,
+        #     #                 transition_point.starting_point.predicted_profit, c='r')
+        #     plt.title('POV')
+        #     plt.subplot(M, 2, (i + 1) * 2)
+        #     plt.xlim([interval_start, interval_end])
+        #     plt.title('TOV')
+        #     plt.scatter(sample_spaces[i], TOVS[i])
+        #     for transition_point in transition_points:
+        #         plt.scatter((transition_point.starting_point.x + transition_point.ending_point.x) * 0.5,
+        #                     transition_point.starting_point.true_profit, c='r')
+        #     plt.subplot(3, 2, 3)
+        #     plt.title('Derivatives')
+        #     shifted_POVS = np.roll(benchmark_POVS, 1)
+        #     der = (benchmark_POVS[1:99] - shifted_POVS[1:99]) / (sample_params[1] - sample_params[2])
+        #     plt.scatter(sample_params[1:99], der)
+        #     shifted_der = np.roll(der, 1)
+        #     d2 = (der[2:98] - shifted_der[2:98]) / (sample_params[1] - sample_params[2])
+        #
+        #     plt.subplot(3, 2, 4)
+        #     plt.title('Second Derivatives')
+        #     plt.scatter(sample_params[2:98], d2)
+        #     # for i in range(96):
+        #     #     print("decision policy({}): {}, der2: {}".format(i, decision_policies[i + 2], np.round(d2[i], 3)))
+        #
+        #     plt.subplot(3, 2, 5)
+        #     plt.title('Individual Item Predictions')
+        #     for i in range(50):
+        #         plt.plot(sample_params, pred_ys[i, :])
+        #     plt.subplot(3, 2, 6)
+        #     plt.title("MSE")
+        #     mse = []
+        #     for i in range(100):
+        #         mse.append(np.mean((benchmark_y - pred_ys[:, i]) ** 2))
+        #     plt.scatter(sample_params, mse)
+        #
+        #     plt.figure()
+        #     for i in range(100):
+        #         plt.title("pred_values vs real values")
+        #         plt.subplot(10,10,i+1)
+        #         plt.scatter(np.array([i for i in range(50)]), pred_ys[:,i], c='r')
+        #         plt.scatter(np.array([i for i in range(50)]), benchmark_y, c='b')
+        # plt.show()
+        sampling_time = time.time() - sampling_time
+        # print("step_size:", round(sampling_time, 6), "copy time:", (copy_finish), "iteration: ", iteration)
+        return transition_points, final_intervals, sample_spaces[-1], POVS[-1], TOVS[-1], greedy_sampling_end_time
+
     def exhaustive_search(self, benchmark_x, benchmark_y, weights, param_ind, model, layer=None):
         """
               This methods approaches the transition point search from an exhaustive approach. The sample size is bounded
@@ -652,7 +911,13 @@ class Sampler:
             return self.divide_and_conquer_greedy_search(benchmark_x=benchmark_x, benchmark_y=benchmark_y,
                                                          weights=weights,
                                                          param=param_ind,
-                                                         model=model, layer_no=layer, bias=bias)
+                                                         model=model, layer_no=layer, bias=bias, profit=profit)
+
+        if self.sampling_method == DIVIDE_AND_CONQUER_GREEDY_MERGED:
+            return self.divide_and_conquer_greedy_search_merged(benchmarks_x=benchmarks_x, benchmarks_y=benchmarks_y,
+                                                         weights=weights,
+                                                         param=param_ind,
+                                                         model=model, layer_no=layer, bias=bias, profit=profit)
 
         if self.sampling_method == EXHAUSTIVE:
             return self.exhaustive_search(benchmark_x=benchmark_x, benchmark_y=benchmark_y, weights=weights,
