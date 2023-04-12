@@ -159,6 +159,22 @@ def find_the_best_transition_point_benchmarks_worker(transition_point_x, train_X
 
     return TransitionPoint(transition_point_x, true_profit=average_profit - L2_loss)
 
+def find_the_best_transition_point_benchmarks_merged(benchmark_X, benchmark_Y, benchmark_weights, model, layer_no,
+                                    param_ind, sampler, profit, train_X, train_Y, train_weights, mypool=None,
+                                    bias=False):
+    # print("Inside get and clean, starting get, thread{}",format(os.getpid()))
+
+    dnc_points, dnc_intervals, __, dnc_POVS, dnc_TOVS, run_time = sampler.get_transition_points(
+        model,
+        layer_no,
+        benchmark_X,
+        benchmark_Y,
+        benchmark_weights,
+        param_ind,
+        bias, profit)
+    best_transition_point_set_benchmark = 0
+    return best_transition_point_set_benchmark, run_time
+
 
 class my_abs(nn.Module):
     def forward(self, x):
@@ -499,7 +515,7 @@ class relu_ppo(nn.Module):
                     self.val_regrets.append(val_regret)
                     self.val_objs.append(np.median(val_obj))
                     if val_regret < best_val:
-                        best_model_state = copy.deepcopy(self.state_dict())
+                        best_model_state = copy.deepcopy(self)
 
                 if print_test:
                     # print('test')
@@ -539,7 +555,7 @@ class relu_ppo(nn.Module):
         print('Training finished ')
         print("-----------------------")
         self.number_of_epochs = EPOCH
-        torch.save(self, os.path.join(self.path, "dnl.pth"))
+        torch.save(best_model_state, os.path.join(self.path, "dnl22.pth"))
         if self.is_parallel:
             mypool.close()
 
@@ -661,28 +677,36 @@ class relu_ppo(nn.Module):
                 # print("entering get and clean")
                 # Weights
                 start_time = time.time()
-                best_transition_points_set, average_run_time = self.get_and_clean_profiler_wrap(layer_no=layer_no, sampler=dnc_sampler,
-                                                                              param_ind=param,
-                                                                              profit=profit, train_X=train_X,
-                                                                              train_Y=train_Y,
-                                                                              train_weights=train_weights, bias=param.bias,
-                                                                              mypool=mypool)
-                dnc_sampler.update_greedy_runtime(average_run_time, param)
+                # best_transition_points_set, average_run_time = self.get_and_clean_profiler_wrap(layer_no=layer_no, sampler=dnc_sampler,
+                #                                                               param_ind=param,
+                #                                                               profit=profit, train_X=train_X,
+                #                                                               train_Y=train_Y,
+                #                                                               train_weights=train_weights, bias=param.bias,
+                #                                                               mypool=mypool)
+                # dnc_sampler.update_greedy_runtime(average_run_time, param)
+                #
+                # self.sampling_time += time.time() - start_time
+                # start_time = time.time()
+                # # print("finished get and clean, entering find the best")
+                # benchmark_best_transition_point = find_the_best_transition_point_benchmarks(train_X,
+                #                                                                             train_Y,
+                #                                                                             model=self,
+                #                                                                             layer_no=layer_no,
+                #                                                                             train_weights=train_weights,
+                #                                                                             opt_params=self.opt_params,
+                #                                                                             transition_point_list=list(
+                #                                                                                 best_transition_points_set),
+                #                                                                             profit=profit,
+                #                                                                             param_ind=param.param_ind,
+                #                                                                             pool=mypool, bias=param.bias)
 
-                self.sampling_time += time.time() - start_time
-                start_time = time.time()
-                # print("finished get and clean, entering find the best")
-                benchmark_best_transition_point = find_the_best_transition_point_benchmarks(train_X,
-                                                                                            train_Y,
-                                                                                            model=self,
-                                                                                            layer_no=layer_no,
-                                                                                            train_weights=train_weights,
-                                                                                            opt_params=self.opt_params,
-                                                                                            transition_point_list=list(
-                                                                                                best_transition_points_set),
-                                                                                            profit=profit,
-                                                                                            param_ind=param.param_ind,
-                                                                                            pool=mypool, bias=param.bias)
+                benchmark_best_transition_point = find_the_best_transition_point_benchmarks_merged(layer_no=layer_no, sampler=dnc_sampler,
+                #                                                               param_ind=param,
+                #                                                               profit=profit, train_X=train_X,
+                #                                                               train_Y=train_Y,
+                #                                                               train_weights=train_weights, bias=param.bias,
+                #                                                               mypool=mypool)
+
                 self.compare_time += time.time() - start_time
 
                 prev_profit = profit

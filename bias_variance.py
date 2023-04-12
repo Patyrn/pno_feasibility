@@ -30,7 +30,7 @@ def prepare_icon_dataset(kfold=0, is_shuffle=False):
     # combine weights with X first
     # may need to split weights
 
-    train_set, test_set = get_train_test_split(dataset, random_seed=0, is_shuffle=is_shuffle)
+    train_set, test_set = get_train_test_split(dataset, random_seed=81, is_shuffle=is_shuffle)
 
     X_train = train_set.get('X').T
     Y_train = train_set.get('Y').T
@@ -245,7 +245,7 @@ def plot_impactful_sets(capacity, kfold, is_shuffle):
 
     sorted_benchmarks = copy.deepcopy(Y_test_sets)
     # sorted_regret = sorted(regret, reverse=True)
-    is_reverse = False
+    is_reverse = True
     sorted_regret = regret
     sorted_benchmarks = [x for _, x in sorted(zip(sorted_regret,sorted_benchmarks), key=lambda pair: pair[0], reverse=is_reverse)]
     sorted_preds = [x for _, x in sorted(zip(sorted_regret,pred_Ys), key=lambda pair: pair[0], reverse=is_reverse)]
@@ -297,14 +297,17 @@ def plot_impactful_sets_dnl(capacity, kfold, is_shuffle):
 
     sorted_benchmarks = copy.deepcopy(Y_test_sets)
     # sorted_regret = sorted(regret, reverse=True)
-    is_reverse = True
+    is_reverse = False
 
     # regret
     #
     regret = relu_regret - dnl_regret
     sorted_regret = regret
-    print("regret1",np.median(relu_regret) - np.median(dnl_regret))
-    print("regret2",np.median(regret))
+    # print("regret1",np.median(relu_regret) - np.median(dnl_regret))
+    # print("regret2",np.median(regret))
+    # print("relu_regret",np.median(relu_regret))
+    # print("reg_regret",np.median(dnl_regret))
+
 
     sorted_benchmarks = [x for _, x in sorted(zip(sorted_regret,sorted_benchmarks), key=lambda pair: pair[0], reverse=is_reverse)]
     sorted_preds_dnl = [x for _, x in sorted(zip(sorted_regret,pred_Ys_dnl), key=lambda pair: pair[0], reverse=is_reverse)]
@@ -347,9 +350,9 @@ def plot_std_vs_regret(sorted_regret, sorted_preds_dnl,sorted_preds_relu, sorted
                                                                                                    (
                                                                                                  sorted_predicted_solutions_relu),
                                                                                                  (sorted_solutions)):
-        dnl_std.append(np.std((pred_dnl)[:,0])/np.mean((pred_dnl)[:,0]))
-        relu_std.append(np.std((pred_relu)[:,0])/np.mean((pred_relu)[:,0]))
-        normal_std.append(np.std(Y)/np.mean(Y))
+        dnl_std.append(np.std((pred_dnl)[:,0]))
+        relu_std.append(np.std((pred_relu)[:,0]))
+        normal_std.append(np.std(Y))
 
 
 
@@ -394,11 +397,16 @@ def plot_problem_set(pred_dnl,pred_relu, Y, predicted_solution_dnl= None, predic
     alpha = 0.5
     fig = plt.figure()
     ax = plt.gca()
+    Y = (Y-min(Y))/(max(Y)-min(Y))
+    pred_dnl = (pred_dnl - min(pred_dnl)) / (max(pred_dnl) - min(pred_dnl))
+    pred_relu = (pred_relu - min(pred_relu)) / (max(pred_relu) - min(pred_relu))
+
+
     plt.scatter(index, y=Y, alpha=alpha, c='b')
     plt.scatter(index, y=pred_dnl, alpha=alpha, c='r')
     plt.scatter(index, y=pred_relu, alpha=alpha, c='y')
-    rectangle_width = 1
-    rectange_height = 50
+    rectangle_width = max(Y)/1
+    rectange_height = max(Y)/10
     width_offset = rectangle_width / 2
     height_offset = rectange_height / 2
     if solution is not None:
@@ -411,7 +419,7 @@ def plot_problem_set(pred_dnl,pred_relu, Y, predicted_solution_dnl= None, predic
     if predicted_solution_relu is not None:
         for item in predicted_solution_relu:
             ax.add_patch(Rectangle((int(item) - width_offset, pred_relu[int(item)] - height_offset), rectangle_width, rectange_height, facecolor="y",alpha=alpha))
-    ax.set_title("dnl: {}, relu: {}".format(sum(Y[predicted_solution_dnl]),sum(Y[predicted_solution_relu])))
+    ax.set_title("reg: {}, relu: {}".format(sum(Y[predicted_solution_dnl]),sum(Y[predicted_solution_relu])))
     ax.legend(['true', 'reg', 'dnl'])
     # print("objective: {}, pred: {}".format(sum(Y[solution]),sum(Y[predicted_solution])))
 

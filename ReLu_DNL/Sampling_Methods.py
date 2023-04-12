@@ -12,6 +12,7 @@ from Utils import Interval, create_transition_points_from_intervals, TransitionP
 
 import heapq
 
+import multiprocessing as mp
 
 """
 This file contains the Sampler object and functions related to compute optimization probelem of benchmarks
@@ -645,6 +646,12 @@ class Sampler:
                     sample_spaces[i].extend(sample_space)
                     # compute the profits of the sample points
                     if i == 0:
+                        map_func = partial(get_optimization_objective_for_samples, weights,
+                            sample_space,
+                            param.param_ind,
+                            temp_model, layer_no, bias)
+                        iter = zip(Y, pred_Ys, weights)
+                        objective_values = pool.starmap(map_func, iter)
                         benchmark_TOVS, benchmark_POVS, __, pred_ys = get_optimization_objective_for_samples(
                             benchmark_x,
                             benchmark_y,
