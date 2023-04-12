@@ -6,7 +6,7 @@ import numpy as np
 from EnergyDataUtil import get_energy_data
 from KnapsackSolver import get_opt_params_knapsack
 from ReLu_DNL.ReLu_DNL import relu_ppo
-from ReLu_DNL.Sampling_Methods import DIVIDE_AND_CONQUER, DIVIDE_AND_CONQUER_GREEDY
+from ReLu_DNL.Sampling_Methods import DIVIDE_AND_CONQUER, DIVIDE_AND_CONQUER_GREEDY, DIVIDE_AND_CONQUER_GREEDY_MERGED
 from Utils import get_train_test_split
 import multiprocessing as mp
 
@@ -132,7 +132,7 @@ def train_relu(file_name_prefix='noprefix', file_folder='', max_step_size_magnit
                                    opt_params=opt_params, dnl_batch_size=dnl_batch_size,
                                    dnl_learning_rate=dnl_learning_rate,
                                    is_parallel=True, is_update_bias=is_update_bias, L2_lambda=L2_Lambda,
-                                   sampling_method=DIVIDE_AND_CONQUER_GREEDY, run_time_limit=time_limit))
+                                   sampling_method=DIVIDE_AND_CONQUER_GREEDY_MERGED, run_time_limit=time_limit))
 
 
             # initialize models

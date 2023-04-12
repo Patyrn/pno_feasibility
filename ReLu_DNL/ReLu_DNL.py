@@ -15,6 +15,7 @@ from sklearn.utils import shuffle
 from sklearn import preprocessing
 
 from ReLu_DNL import Sampling_Methods
+from ReLu_DNL.Sampling_Methods import DIVIDE_AND_CONQUER_GREEDY
 # from dnl import Sampling_Methods
 # from dnl.DnlNeuralLayer import get_dnl_exact_grad
 # from dnl.EnergyDataUtil import get_energy_data
@@ -27,7 +28,6 @@ from ReLu_DNL import Sampling_Methods
 
 from Solver import get_optimization_objective, get_optimal_average_objective_value
 from Utils import TransitionPoint, get_mini_batches
-
 
 
 def get_benchmarks_from_input_tensor(x, benchmark_size):
@@ -149,9 +149,9 @@ def find_the_best_transition_point_benchmarks_worker(transition_point_x, train_X
     pred_Ys = []
     for x in train_X:
         pred_Ys.append(temp_model.forward(x).detach().numpy().flatten())
-    optimization_objective, __ =get_optimization_objective(pred_Y=pred_Ys, Y=train_Y,
-                                                          weights=train_weights, opt_params=opt_params,
-                                                          )
+    optimization_objective, __ = get_optimization_objective(pred_Y=pred_Ys, Y=train_Y,
+                                                            weights=train_weights, opt_params=opt_params,
+                                                            )
     average_profit = np.median(optimization_objective)
     L2_loss = model.L2_lambda * (model.get_L2_loss(layer_no, param_ind, bias) + transition_point_x ** 2)
     # print("L2 loss: {}, regret with L2 Loss: {}".format(L2_loss, average_profit - L2_loss))
@@ -159,9 +159,10 @@ def find_the_best_transition_point_benchmarks_worker(transition_point_x, train_X
 
     return TransitionPoint(transition_point_x, true_profit=average_profit - L2_loss)
 
+
 def find_the_best_transition_point_benchmarks_merged(benchmark_X, benchmark_Y, benchmark_weights, model, layer_no,
-                                    param_ind, sampler, profit, train_X, train_Y, train_weights, mypool=None,
-                                    bias=False):
+                                                     param_ind, sampler, profit,
+                                                     bias=False, pool=None):
     # print("Inside get and clean, starting get, thread{}",format(os.getpid()))
 
     dnc_points, dnc_intervals, __, dnc_POVS, dnc_TOVS, run_time = sampler.get_transition_points(
@@ -171,7 +172,7 @@ def find_the_best_transition_point_benchmarks_merged(benchmark_X, benchmark_Y, b
         benchmark_Y,
         benchmark_weights,
         param_ind,
-        bias, profit)
+        bias, profit, pool)
     best_transition_point_set_benchmark = 0
     return best_transition_point_set_benchmark, run_time
 
@@ -183,15 +184,16 @@ class my_abs(nn.Module):
 
 
 class relu_ppo(nn.Module):
-    def __init__(self, batch_size=16, dnl_batch_size=16, layer_params=None, benchmark_size=48, max_epoch=10, learning_rate=1e-2,
+    def __init__(self, batch_size=16, dnl_batch_size=16, layer_params=None, benchmark_size=48, max_epoch=10,
+                 learning_rate=1e-2,
                  dnl_epoch=10,
                  opt_params=5,
                  dnl_learning_rate=0.1, leaky_slope=0.2, sampling_method=Sampling_Methods.DIVIDE_AND_CONQUER,
                  max_step_size_magnitude=1,
-                 min_step_size_magnitude=-1, params_per_epoch_divider = 5,
+                 min_step_size_magnitude=-1, params_per_epoch_divider=5,
                  transition_point_selection=Sampling_Methods.MID_TRANSITION_POINT_SELECTION,
                  verbose=False, is_Val=True, run_time_limit=10000,
-                 is_parallel=False, pool=None, is_update_bias=True, L2_lambda=0.001, path = None):
+                 is_parallel=False, pool=None, is_update_bias=True, L2_lambda=0.001, path=None):
         """
         :param layer_params: neural net layer configuration
         :param benchmark_size: size of the benchmark
@@ -243,7 +245,7 @@ class relu_ppo(nn.Module):
         self.run_time_limit = run_time_limit
         self.training_obj_value = []
         self.test_regrets = []
-        self.test_objs= []
+        self.test_objs = []
         self.test_MSEs = []
         self.val_regrets = []
         self.val_objs = []
@@ -255,20 +257,22 @@ class relu_ppo(nn.Module):
         self.test_vars = []
 
         self.dnc_sampler = Sampling_Methods.Sampler(sampling_method=sampling_method,
-                                               max_step_size_magnitude=max_step_size_magnitude,
-                                               min_step_size_magnitude=min_step_size_magnitude,
-                                               transition_point_selection=transition_point_selection, model = self)
-
+                                                    max_step_size_magnitude=max_step_size_magnitude,
+                                                    min_step_size_magnitude=min_step_size_magnitude,
+                                                    transition_point_selection=transition_point_selection, model=self)
+        self.profiler_sampler = Sampling_Methods.Sampler(sampling_method=DIVIDE_AND_CONQUER_GREEDY,
+                                                    max_step_size_magnitude=max_step_size_magnitude,
+                                                    min_step_size_magnitude=min_step_size_magnitude,
+                                                    transition_point_selection=transition_point_selection, model=self)
 
     def init_layers(self, layer_params):
         self.layers = nn.ModuleList()
-        for i,layer_param in enumerate(layer_params[:-1]):
-            self.layers.append(nn.Linear(in_features=layer_params[i], out_features=layer_params[i+1]))
+        for i, layer_param in enumerate(layer_params[:-1]):
+            self.layers.append(nn.Linear(in_features=layer_params[i], out_features=layer_params[i + 1]))
 
         # self.relu = nn.LeakyReLU(negative_slope=self.leaky_slope)
         self.abs = my_abs()
         self.relu = nn.LeakyReLU(negative_slope=self.leaky_slope)
-
 
     def get_layer(self, layer_no):
         return self.layers[layer_no]
@@ -338,6 +342,7 @@ class relu_ppo(nn.Module):
             #     # print('y',y,'y_pred',y_pred)
             #     print(t, loss.item())
         torch.save(self, os.path.join(self.path, "regression.pth"))
+
     def get_L2_loss(self, custom_layer_no=None, custom_param_ind=None, bias=False):
         weight_sum = 0
         for layer_no in range(len(self.layers)):
@@ -357,7 +362,7 @@ class relu_ppo(nn.Module):
                 test_X=None, test_Y=None,
                 test_weights=None, core_number=8, sampling_method=None, max_step_size_magnitude=None,
                 min_step_size_magnitude=None,
-                transition_point_selection=None, test_X_MSE=None, test_Y_MSE = None, run_time_batch_size=10):
+                transition_point_selection=None, test_X_MSE=None, test_Y_MSE=None, run_time_batch_size=10):
 
         if sampling_method is None:
             sampling_method = self.sampling_method
@@ -400,14 +405,14 @@ class relu_ppo(nn.Module):
         prev_profit = profit
 
         if self.is_val:
-            val_regret,_, val_obj,_ = self.get_regret(val_X, val_Y, val_weights, pool=mypool)
+            val_regret, _, val_obj, _ = self.get_regret(val_X, val_Y, val_weights, pool=mypool)
 
         else:
             val_regret = -1
             val_obj = -1
 
         if print_test:
-            test_regret,_, test_obj,_ = self.get_regret(test_X, test_Y, test_weights, pool=mypool)
+            test_regret, _, test_obj, _ = self.get_regret(test_X, test_Y, test_weights, pool=mypool)
         else:
             test_regret = -1
             test_obj = -1
@@ -452,7 +457,8 @@ class relu_ppo(nn.Module):
 
         print("BEFORE:", "objective value:", profit, 'val regret',
               self.val_regrets[-1], 'test regret', self.test_regrets[-1], flush=True)
-        self.initiate_greedy_runtimes(self.dnc_sampler, train_X[0:run_time_batch_size], train_Y[0:run_time_batch_size], train_weights[0:run_time_batch_size], profit, mypool)
+        self.initiate_greedy_runtimes(self.profiler_sampler, train_X[0:run_time_batch_size], train_Y[0:run_time_batch_size],
+                                      train_weights[0:run_time_batch_size], profit, mypool)
 
         sub_epoch = 0
         if test_X_MSE is not None:
@@ -484,14 +490,17 @@ class relu_ppo(nn.Module):
                 # if dnc_sampler.greedy_run_times is not None and len(dnc_sampler.greedy_run_times) > 10:
                 # print(len(dnc_sampler.greedy_run_times))
                 # number_of_parameters_to_update = int(len(dnc_sampler.greedy_run_times) / 5)
-                number_of_parameters_to_update = int(len(self.dnc_sampler.greedy_run_times) / self.params_per_epoch_divider)
+                number_of_parameters_to_update = int(
+                    len(self.dnc_sampler.greedy_run_times) / self.params_per_epoch_divider)
                 self.number_of_parameters_to_update = number_of_parameters_to_update
                 # number_of_parameters_to_update = 10
-                param_list = [heapq.heappop(self.dnc_sampler.greedy_run_times) for i in range(number_of_parameters_to_update)]
+                param_list = [heapq.heappop(self.dnc_sampler.greedy_run_times) for i in
+                              range(number_of_parameters_to_update)]
                 for param in param_list:
                     param.increase_count()
                     # print("layer: {}, ind: {}, count: {}, run_time: {}".format(param.layer_no, param.param_ind, param.update_count, param.runtime))
-                self.update_weights_heap(train_X, train_Y, train_weights, self.dnc_sampler, mypool, bias, profit, param_list)
+                self.update_weights_heap(train_X, train_Y, train_weights, self.dnc_sampler, mypool, bias, profit,
+                                         param_list)
                 # else:
                 #     for layer_no in layer_order:
                 #         # print("layer: {}".format(layer_no))
@@ -510,7 +519,7 @@ class relu_ppo(nn.Module):
                 test_run_time = time.time()
                 if self.is_val:
                     # print('val')
-                    val_regret,_, val_obj,_ = self.get_regret(val_X, val_Y, val_weights, pool=mypool)
+                    val_regret, _, val_obj, _ = self.get_regret(val_X, val_Y, val_weights, pool=mypool)
                     val_regret = np.median(val_regret)
                     self.val_regrets.append(val_regret)
                     self.val_objs.append(np.median(val_obj))
@@ -519,7 +528,7 @@ class relu_ppo(nn.Module):
 
                 if print_test:
                     # print('test')
-                    test_regret,_, test_obj,_ = self.get_regret(test_X, test_Y, test_weights, pool=mypool)
+                    test_regret, _, test_obj, _ = self.get_regret(test_X, test_Y, test_weights, pool=mypool)
                     self.test_regrets.append(np.median(test_regret))
                     self.test_objs.append(np.median(test_obj))
                     # train_regret = np.median(self.get_regret(train_X, train_Y, train_weights, pool=mypool))
@@ -534,14 +543,15 @@ class relu_ppo(nn.Module):
                     if test_Y_MSE is not None:
                         test_MSE = self.get_MSE(test_X_MSE, test_Y_MSE)
                         self.test_MSEs.append(test_MSE)
-                        
+
                 self.sub_epochs.append(sub_epoch)
                 self.epochs.append(EPOCH)
                 self.run_time.append((time.time() - start_time - self.test_run_time))
                 print("EPOCH:", EPOCH, "sub epoch:", sub_epoch, "objective value:", profit, 'val regret',
                       self.val_regrets[-1], 'test regret', self.test_regrets[-1], "run time:", self.run_time[-1],
                       flush=True)
-                print("Sampling Time: {}, Compare Time: {}, Test Time{}".format(self.sampling_time, self.compare_time, self.test_run_time))
+                print("Sampling Time: {}, Compare Time: {}, Test Time{}".format(self.sampling_time, self.compare_time,
+                                                                                self.test_run_time))
                 print("**************************************************************************************")
                 if self.run_time[-1] > self.run_time_limit:
                     is_break = True
@@ -565,19 +575,15 @@ class relu_ppo(nn.Module):
             layer_no = param.layer_no
             # print("entering get and clean")
             # Weights
-            best_transition_points_set, average_run_time = self.get_and_clean_profiler_wrap(layer_no=layer_no, sampler=sampler,
-                                                                          param_ind=param,
-                                                                          profit=profit, train_X=batch_X,
-                                                                          train_Y=batch_Y,
-                                                                          train_weights=batch_weights, bias=param.bias,
-                                                                          mypool=mypool)
-            sampler.update_greedy_runtime(average_run_time*5, param)
-
-
-
-
-
-
+            best_transition_points_set, average_run_time = self.get_and_clean_profiler_wrap(layer_no=layer_no,
+                                                                                            param_ind=param,
+                                                                                            profit=profit,
+                                                                                            train_X=batch_X,
+                                                                                            train_Y=batch_Y,
+                                                                                            train_weights=batch_weights,
+                                                                                            bias=param.bias,
+                                                                                            mypool=mypool)
+            sampler.update_greedy_runtime(average_run_time * 5, param)
 
     def get_MSE(self, x, y):
         y = torch.from_numpy(y).float()
@@ -597,12 +603,12 @@ class relu_ppo(nn.Module):
 
         if pool is None:
             objective_values_predicted_items, predicted_sols = get_optimization_objective(Y=Y, pred_Y=pred_Ys,
-                                                                                      weights=weights,
-                                                                                      opt_params=opt_params,
-                                                                                      )
-            optimal_objective_values,sols = get_optimal_average_objective_value(Y=Y, weights=weights,
-                                                                                  opt_params=self.opt_params,
-                                                                                  )
+                                                                                          weights=weights,
+                                                                                          opt_params=opt_params,
+                                                                                          )
+            optimal_objective_values, sols = get_optimal_average_objective_value(Y=Y, weights=weights,
+                                                                                 opt_params=self.opt_params,
+                                                                                 )
 
             regret = np.median(optimal_objective_values - objective_values_predicted_items)
         else:
@@ -647,25 +653,27 @@ class relu_ppo(nn.Module):
             map_func = partial(get_regret_worker, opt_params=self.opt_params)
             iter = zip(Y, pred_Ys, weights)
             objective_values = pool.starmap(map_func, iter)
-            objective_values_predicted_items,_, optimal_objective_values,_ = zip(*objective_values)
+            objective_values_predicted_items, _, optimal_objective_values, _ = zip(*objective_values)
             regret = np.median(
                 np.concatenate(optimal_objective_values) - np.concatenate(objective_values_predicted_items))
             objective_values_predicted_items = np.concatenate(objective_values_predicted_items)
         return np.median(objective_values_predicted_items)
 
-    def get_and_clean_profiler_wrap(self, layer_no, sampler,
+    def get_and_clean_profiler_wrap(self, layer_no,
                                     param_ind,
                                     profit, train_X, train_Y,
                                     train_weights, bias, mypool):
+
         map_func = partial(get_and_clean_transition_points, model=self,
-                           layer_no=layer_no, sampler=sampler,
+                           layer_no=layer_no, sampler=self.profiler_sampler,
                            param_ind=param_ind,
                            profit=profit, train_X=train_X, train_Y=train_Y,
-                           train_weights=train_weights, bias=bias)
+                           train_weights=train_weights, bias=bias,pool=mypool)
         iter = [[benchmark_X, benchmark_Y, benchmark_weights] for
                 benchmark_X, benchmark_Y, benchmark_weights in
                 zip(train_X, train_Y, train_weights)]
         # print(layer_no)
+        mypool.starmap(map_func, iter)
         best_transition_points_set, run_times = zip(*mypool.starmap(map_func, iter))
         best_transition_points_set = set().union(*best_transition_points_set)
         return best_transition_points_set, statistics.median(run_times)
@@ -700,18 +708,21 @@ class relu_ppo(nn.Module):
                 #                                                                             param_ind=param.param_ind,
                 #                                                                             pool=mypool, bias=param.bias)
 
-                benchmark_best_transition_point = find_the_best_transition_point_benchmarks_merged(layer_no=layer_no, sampler=dnc_sampler,
-                #                                                               param_ind=param,
-                #                                                               profit=profit, train_X=train_X,
-                #                                                               train_Y=train_Y,
-                #                                                               train_weights=train_weights, bias=param.bias,
-                #                                                               mypool=mypool)
+                benchmark_best_transition_point = find_the_best_transition_point_benchmarks_merged(train_X,
+                                                                                                   train_Y,
+                                                                                                   train_weights,
+                                                                                                   model=self,
+                                                                                                   layer_no=layer_no,
+                                                                                                   sampler=dnc_sampler,
+                                                                                                   param_ind=param,
+                                                                                                   profit=profit,
+                                                                                                   bias=param.bias,
+                                                                                                   pool=mypool)
 
                 self.compare_time += time.time() - start_time
 
                 prev_profit = profit
                 profit = benchmark_best_transition_point.true_profit
-
 
                 # print('best transition point profit: ', benchmark_best_transition_point.true_profit)
                 # print("before:",self.weight.data[param_ind], "transition point:", benchmark_best_transition_point.x)
@@ -722,23 +733,23 @@ class relu_ppo(nn.Module):
                             param.param_ind].detach().numpy().astype(float)
                         if gradient != 0:
                             self.get_layer(layer_no).bias.data[param.param_ind] = self.get_layer(layer_no).bias.data[
-                                                                                  param.param_ind] + self.dnl_learning_rate * gradient
+                                                                                      param.param_ind] + self.dnl_learning_rate * gradient
 
                 else:
                     with torch.no_grad():
                         gradient = benchmark_best_transition_point.x - self.get_layer(layer_no).weight.data[
                             param.param_ind].detach().numpy().astype(float)
                         if gradient != 0:
-                            self.get_layer(layer_no).weight.data[param.param_ind] = self.get_layer(layer_no).weight.data[
-                                                                                  param.param_ind] + self.dnl_learning_rate * gradient
-
+                            self.get_layer(layer_no).weight.data[param.param_ind] = \
+                            self.get_layer(layer_no).weight.data[
+                                param.param_ind] + self.dnl_learning_rate * gradient
 
                     # print("after:",self.weight.data[param_ind])
                     # print("gradient: {}".format(gradient))
 
     def update_weights(self, train_X, train_Y, train_weights, layer_no, dnc_sampler, mypool, bias, profit):
 
-        #greedy update best parameters
+        # greedy update best parameters
 
         for param_ind in [(i, j) for i in range(self.get_layer(layer_no).weight.size()[0]) for j in
                           range(self.get_layer(layer_no).weight.size()[1])]:
@@ -920,13 +931,17 @@ class relu_ppo(nn.Module):
 
     def predict(self, X):
         return self.forward(X).detach().numpy()
+
     def print(self):
-        first_line = ['Method', 'Max Step Size Order', 'Min Step Size Order', "Layer params", "params_per_epoch", "leaky_slope", 'Run Time Limit', 'Epoch Limit',
+        first_line = ['Method', 'Max Step Size Order', 'Min Step Size Order', "Layer params", "params_per_epoch",
+                      "leaky_slope", 'Run Time Limit', 'Epoch Limit',
                       'Mini Batch Size', 'Learning rate', 'Parallelism', "Bias", "L2 Lambda"]
-        second_line = [self.sampling_method, self.max_step_size_magnitude, self.min_step_size_magnitude, self.layer_params, self.number_of_parameters_to_update, self.leaky_slope,
+        second_line = [self.sampling_method, self.max_step_size_magnitude, self.min_step_size_magnitude,
+                       self.layer_params, self.number_of_parameters_to_update, self.leaky_slope,
                        self.run_time_limit, self.dnl_epoch, self.dnl_batch_size, self.dnl_learning_rate,
                        self.is_parallel, self.is_update_bias, self.L2_lambda]
-        third_line = ['epochs', 'sub epochs', 'run time', 'val obj', 'val regret', 'test obj', 'test regret', 'regret ratio%', 'test_MSE' ]
+        third_line = ['epochs', 'sub epochs', 'run time', 'val obj', 'val regret', 'test obj', 'test regret',
+                      'regret ratio%', 'test_MSE']
         new_test_predy = [[] for i in range(self.test_pred_y[0].shape[0])]
         ratios = [self.test_regrets[i] * 100 / self.test_objs[i] for i in range(len(self.test_regrets))]
         for i in range(len(self.test_pred_y)):
@@ -934,8 +949,9 @@ class relu_ppo(nn.Module):
                 new_test_predy[j].append(float(self.test_pred_y[i][j]))
 
         significant_number = 3
-        rest = round_list([self.epochs, self.sub_epochs, self.run_time, self.val_objs, self.val_regrets, self.test_objs, self.test_regrets, ratios, self.test_MSEs
-                ], significant_number)
+        rest = round_list([self.epochs, self.sub_epochs, self.run_time, self.val_objs, self.val_regrets, self.test_objs,
+                           self.test_regrets, ratios, self.test_MSEs
+                           ], significant_number)
         # rest.extend(new_test_predy)
         rest = np.array(rest).T.tolist()
         print = []
@@ -950,15 +966,18 @@ class relu_ppo(nn.Module):
             self.min_step_size_magnitude) + file_type
         return file_name
 
+
 def round_list(arrs, sig_number):
-    rounded_list = [[round(elem,sig_number) for elem in arr] for arr in arrs]
+    rounded_list = [[round(elem, sig_number) for elem in arr] for arr in arrs]
     return rounded_list
+
+
 def get_regret_worker(Y, pred_Ys, weights, opt_params):
     average_objective_value_with_predicted_items, predicted_sols = get_optimization_objective(Y=[Y], pred_Y=[pred_Ys],
-                                                                              weights=[weights],
-                                                                              opt_params=opt_params,
-                                                                              )
+                                                                                              weights=[weights],
+                                                                                              opt_params=opt_params,
+                                                                                              )
     optimal_average_objective_value, sols = get_optimal_average_objective_value(Y=[Y], weights=[weights],
-                                                                          opt_params=opt_params,
-                                                                          )
+                                                                                opt_params=opt_params,
+                                                                                )
     return average_objective_value_with_predicted_items, predicted_sols[0], optimal_average_objective_value, sols[0]

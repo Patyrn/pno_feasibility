@@ -1,6 +1,7 @@
 import copy
 import math
 import time
+from multiprocessing import pool
 
 import numpy as np
 
@@ -646,32 +647,27 @@ class Sampler:
                     sample_spaces[i].extend(sample_space)
                     # compute the profits of the sample points
                     if i == 0:
-                        map_func = partial(get_optimization_objective_for_samples, weights,
-                            sample_space,
-                            param.param_ind,
-                            temp_model, layer_no, bias)
-                        iter = zip(Y, pred_Ys, weights)
-                        objective_values = pool.starmap(map_func, iter)
-                        benchmark_TOVS, benchmark_POVS, __, pred_ys = get_optimization_objective_for_samples(
-                            benchmark_x,
-                            benchmark_y,
-                            weights,
-                            sample_space,
-                            param.param_ind,
-                            temp_model, layer_no, bias)
+                        map_func = partial(get_optimization_objective_for_samples, weights=weights,
+                            sample_space=sample_space,
+                            param_ind=param.param_ind,
+                            model=temp_model, layer_no=layer_no, bias=bias)
+                        iter = zip(benchmarks_x, benchmarks_y, weights)
+                        sample_points = pool.starmap(map_func, iter)
+                        benchmark_TOVS, benchmark_POVS, __, pred_ys= zip(*sample_points)
+
                         # initialize profit to the profit with the current value, may cache it to increase speed
                         profit = benchmark_TOVS[1]
                         original_param = TransitionPoint(x=sample_space[1], true_profit=profit,
                                                          predicted_profit=benchmark_POVS[1])
                     else:
                         # cache previous sample solutions
-                        benchmark_TOVS, benchmark_POVS, __, pred_ys = get_optimization_objective_for_samples(
-                            benchmark_x,
-                            benchmark_y,
-                            weights,
-                            sample_space[1:-1],
-                            param.param_ind,
-                            temp_model, layer_no, bias)
+                        map_func = partial(get_optimization_objective_for_samples, weights=weights,
+                                           sample_space=sample_space,
+                                           param_ind=param.param_ind,
+                                           model=temp_model, layer_no=layer_no, bias=bias)
+                        iter = zip(benchmark_x, benchmark_y, weights)
+                        sample_points = pool.starmap(map_func, iter)
+                        benchmark_TOVS, benchmark_POVS, __, pred_ys = zip(*sample_points)
 
                         benchmark_TOVS = np.hstack(
                             (interval.starting_point.true_profit, benchmark_TOVS, interval.ending_point.true_profit))
@@ -890,7 +886,7 @@ class Sampler:
         # plt.show()
         return transition_points, transition_intervals, sample_params, POVS, TOVS
 
-    def get_transition_points(self, model, layer, benchmark_x, benchmark_y, weights, param_ind, bias, profit):
+    def get_transition_points(self, model, layer, benchmark_x, benchmark_y, weights, param_ind, bias, profit,pool=None):
         """
         This is a wrapper function, calls the related functions depending of the model.
 
@@ -921,10 +917,10 @@ class Sampler:
                                                          model=model, layer_no=layer, bias=bias, profit=profit)
 
         if self.sampling_method == DIVIDE_AND_CONQUER_GREEDY_MERGED:
-            return self.divide_and_conquer_greedy_search_merged(benchmarks_x=benchmarks_x, benchmarks_y=benchmarks_y,
+            return self.divide_and_conquer_greedy_search_merged(benchmarks_x=benchmark_x, benchmarks_y=benchmark_y,
                                                          weights=weights,
                                                          param=param_ind,
-                                                         model=model, layer_no=layer, bias=bias, profit=profit)
+                                                         model=model, layer_no=layer, bias=bias, profit=profit,pool=pool)
 
         if self.sampling_method == EXHAUSTIVE:
             return self.exhaustive_search(benchmark_x=benchmark_x, benchmark_y=benchmark_y, weights=weights,
