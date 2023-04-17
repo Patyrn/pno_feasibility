@@ -45,7 +45,7 @@ def get_benchmarks_from_input_numpy(x, benchmark_size):
 
 
 def get_and_clean_transition_points(benchmark_X, benchmark_Y, benchmark_weights, model, layer_no,
-                                    param_ind, sampler, profit, train_X, train_Y, train_weights, mypool=None,
+                                    param_ind, sampler, profit,
                                     bias=False):
     # print("Inside get and clean, starting get, thread{}",format(os.getpid()))
 
@@ -173,7 +173,7 @@ def find_the_best_transition_point_benchmarks_merged(benchmark_X, benchmark_Y, b
         benchmark_weights,
         param_ind,
         bias, profit, pool)
-    best_transition_point_set_benchmark = 0
+    best_transition_point_set_benchmark = dnc_points[0]
     return best_transition_point_set_benchmark, run_time
 
 
@@ -190,7 +190,7 @@ class relu_ppo(nn.Module):
                  opt_params=5,
                  dnl_learning_rate=0.1, leaky_slope=0.2, sampling_method=Sampling_Methods.DIVIDE_AND_CONQUER,
                  max_step_size_magnitude=1,
-                 min_step_size_magnitude=-1, params_per_epoch_divider=5,
+                 min_step_size_magnitude=-1, dropout_percentage=10,
                  transition_point_selection=Sampling_Methods.MID_TRANSITION_POINT_SELECTION,
                  verbose=False, is_Val=True, run_time_limit=10000,
                  is_parallel=False, pool=None, is_update_bias=True, L2_lambda=0.001, path=None):
@@ -228,7 +228,7 @@ class relu_ppo(nn.Module):
         self.min_step_size_magnitude = min_step_size_magnitude
         self.transition_point_selection = transition_point_selection
         self.L2_lambda = L2_lambda
-        self.params_per_epoch_divider = params_per_epoch_divider
+        self.dropout_percentage = dropout_percentage
         self.number_of_parameters_to_update = 0
         if path is not None:
             self.path = path
@@ -428,13 +428,13 @@ class relu_ppo(nn.Module):
             test_pred_y = 0
             test_MSE = 0
 
-        self.test_regrets.append(test_regret)
+        self.test_regrets.append(np.median(test_regret))
         self.test_objs.append(test_obj)
 
         self.test_pred_y.append(test_pred_y)
         self.test_MSEs.append(test_MSE)
 
-        self.val_regrets.append(val_regret)
+        self.val_regrets.append(np.median(val_regret))
         self.val_objs.append(val_obj)
 
         self.training_obj_value.append(profit)
@@ -484,15 +484,16 @@ class relu_ppo(nn.Module):
                 # profit = np.median(get_optimization_objective(pred_Y=pred_Y, Y=train_Y, weights=train_weights,
                 #                                               opt_params=self.opt_params))
                 print("-----------------------")
-                print("Sub Epoch: {}".format(sub_epoch))
+
                 layer_order = [2, 1]
                 bias = True
                 # if dnc_sampler.greedy_run_times is not None and len(dnc_sampler.greedy_run_times) > 10:
                 # print(len(dnc_sampler.greedy_run_times))
                 # number_of_parameters_to_update = int(len(dnc_sampler.greedy_run_times) / 5)
                 number_of_parameters_to_update = int(
-                    len(self.dnc_sampler.greedy_run_times) / self.params_per_epoch_divider)
+                    len(self.dnc_sampler.greedy_run_times) * (100-self.dropout_percentage) / 100)
                 self.number_of_parameters_to_update = number_of_parameters_to_update
+                print("Sub Epoch: {} Number of Updates: {}/{}".format(sub_epoch,self.number_of_parameters_to_update,len(self.dnc_sampler.greedy_run_times)))
                 # number_of_parameters_to_update = 10
                 param_list = [heapq.heappop(self.dnc_sampler.greedy_run_times) for i in
                               range(number_of_parameters_to_update)]
@@ -584,7 +585,7 @@ class relu_ppo(nn.Module):
                                                                                             bias=param.bias,
                                                                                             mypool=mypool)
             sampler.update_greedy_runtime(average_run_time * 5, param)
-
+        self.dnc_sampler.greedy_run_times = copy.deepcopy(self.profiler_sampler.greedy_run_times)
     def get_MSE(self, x, y):
         y = torch.from_numpy(y).float()
         y_pred = self.forward(x)
@@ -667,13 +668,12 @@ class relu_ppo(nn.Module):
         map_func = partial(get_and_clean_transition_points, model=self,
                            layer_no=layer_no, sampler=self.profiler_sampler,
                            param_ind=param_ind,
-                           profit=profit, train_X=train_X, train_Y=train_Y,
-                           train_weights=train_weights, bias=bias,pool=mypool)
+                           profit=profit, bias=bias)
+
         iter = [[benchmark_X, benchmark_Y, benchmark_weights] for
                 benchmark_X, benchmark_Y, benchmark_weights in
                 zip(train_X, train_Y, train_weights)]
         # print(layer_no)
-        mypool.starmap(map_func, iter)
         best_transition_points_set, run_times = zip(*mypool.starmap(map_func, iter))
         best_transition_points_set = set().union(*best_transition_points_set)
         return best_transition_points_set, statistics.median(run_times)
@@ -708,7 +708,7 @@ class relu_ppo(nn.Module):
                 #                                                                             param_ind=param.param_ind,
                 #                                                                             pool=mypool, bias=param.bias)
 
-                benchmark_best_transition_point = find_the_best_transition_point_benchmarks_merged(train_X,
+                benchmark_best_transition_point,average_run_time = find_the_best_transition_point_benchmarks_merged(train_X,
                                                                                                    train_Y,
                                                                                                    train_weights,
                                                                                                    model=self,
@@ -719,6 +719,7 @@ class relu_ppo(nn.Module):
                                                                                                    bias=param.bias,
                                                                                                    pool=mypool)
 
+                dnc_sampler.update_greedy_runtime(average_run_time, param)
                 self.compare_time += time.time() - start_time
 
                 prev_profit = profit

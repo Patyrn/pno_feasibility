@@ -1,6 +1,7 @@
 import copy
 import math
 import time
+from functools import partial
 from multiprocessing import pool
 
 import numpy as np
@@ -530,7 +531,7 @@ class Sampler:
         heapq.heappush(self.greedy_run_times, param_runtime)
 
     def divide_and_conquer_greedy_search_merged(self, benchmarks_x, benchmarks_y, weights, param, model, layer_no=None,
-                                         profit=-20, bias=False):
+                                         profit=-20, bias=False, pool = None):
         """
              This methods approaches the transition point search from a divide and conquer approach. Same as the vanilla divide and conquer method,
              but stops at the first transition point which improves the current profit
@@ -627,6 +628,9 @@ class Sampler:
         final_intervals = []
         iteration = 0
         greedy_sampling_time = time.time()
+        iter = [[benchmark_X, benchmark_Y, benchmark_weights] for
+                benchmark_X, benchmark_Y, benchmark_weights in
+                zip(benchmarks_x, benchmarks_y, weights)]
         for i in range(M):
             for interval_no, interval in enumerate(intervals[i]):
 
@@ -647,28 +651,30 @@ class Sampler:
                     sample_spaces[i].extend(sample_space)
                     # compute the profits of the sample points
                     if i == 0:
-                        map_func = partial(get_optimization_objective_for_samples, weights=weights,
-                            sample_space=sample_space,
+                        map_func = partial(get_optimization_objective_for_samples,
+                            sample_params=sample_space,
                             param_ind=param.param_ind,
                             model=temp_model, layer_no=layer_no, bias=bias)
-                        iter = zip(benchmarks_x, benchmarks_y, weights)
+
                         sample_points = pool.starmap(map_func, iter)
                         benchmark_TOVS, benchmark_POVS, __, pred_ys= zip(*sample_points)
 
+                        benchmark_TOVS = np.median(np.array(benchmark_TOVS),axis=0)
+                        benchmark_POVS = np.mean(np.array(benchmark_POVS), axis=0)
                         # initialize profit to the profit with the current value, may cache it to increase speed
                         profit = benchmark_TOVS[1]
                         original_param = TransitionPoint(x=sample_space[1], true_profit=profit,
                                                          predicted_profit=benchmark_POVS[1])
                     else:
                         # cache previous sample solutions
-                        map_func = partial(get_optimization_objective_for_samples, weights=weights,
-                                           sample_space=sample_space,
+                        map_func = partial(get_optimization_objective_for_samples,
+                                           sample_params=sample_space[1:-1],
                                            param_ind=param.param_ind,
                                            model=temp_model, layer_no=layer_no, bias=bias)
-                        iter = zip(benchmark_x, benchmark_y, weights)
                         sample_points = pool.starmap(map_func, iter)
                         benchmark_TOVS, benchmark_POVS, __, pred_ys = zip(*sample_points)
-
+                        benchmark_TOVS = np.median(np.array(benchmark_TOVS),axis=0)
+                        benchmark_POVS = np.mean(np.array(benchmark_POVS), axis=0)
                         benchmark_TOVS = np.hstack(
                             (interval.starting_point.true_profit, benchmark_TOVS, interval.ending_point.true_profit))
 

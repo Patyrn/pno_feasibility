@@ -278,7 +278,7 @@ def plot_impactful_sets_dnl(capacity, kfold, is_shuffle):
 
     scikit_regression = linear_model.Ridge()
     scikit_regression.fit(X_train, Y_train)
-    relu_path = os.path.join(os.path.dirname(__file__),'models/dnl.pth')
+    relu_path = os.path.join(os.path.dirname(__file__),'models/dnl22.pth')
     # relu_dnl = relu_ppo()
     relu_dnl = torch.load(relu_path)
     relu_dnl.eval()
@@ -437,4 +437,4 @@ if __name__ == "__main__":
 
     # bias_variance_sets(capacities, kfold=1, is_shuffle=True)
 
-    plot_impactful_sets_dnl(capacity=12, kfold=0, is_shuffle=True)
+    plot_impactful_sets_dnl(capacity=12, kfold=2, is_shuffle=True)

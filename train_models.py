@@ -13,7 +13,7 @@ import multiprocessing as mp
 
 def train_relu(file_name_prefix='noprefix', file_folder='', max_step_size_magnitude=0,
                        min_step_size_magnitude=-1,
-                       layer_params=None, params_per_epoch_divider=1, path= None,
+                       layer_params=None, dropout_percentage=10, path= None,
                        step_size_divider=10, opt_params=None,
                        generate_weight=True, unit_weight=True, is_shuffle=False, print_test=True,
                        test_boolean=None, core_number=7, time_limit=12000, regression_epoch=50, dnl_epoch=3,
@@ -98,7 +98,7 @@ def train_relu(file_name_prefix='noprefix', file_folder='', max_step_size_magnit
 
             baseline_model = relu_ppo(batch_size=mini_batch_size, max_step_size_magnitude=max_step_size_magnitude,
                                       min_step_size_magnitude=min_step_size_magnitude,
-                                      params_per_epoch_divider=params_per_epoch_divider,
+                                      dropout_percentage=dropout_percentage,
                                       layer_params=layer_params_this, dnl_epoch=dnl_epoch,
                                       opt_params=opt_params, dnl_batch_size=dnl_batch_size,
                                       dnl_learning_rate=dnl_learning_rate,
@@ -119,7 +119,7 @@ def train_relu(file_name_prefix='noprefix', file_folder='', max_step_size_magnit
 
             models.append(relu_ppo(batch_size=mini_batch_size, max_step_size_magnitude=max_step_size_magnitude,
                                    min_step_size_magnitude=min_step_size_magnitude,
-                                   params_per_epoch_divider=params_per_epoch_divider,
+                                   dropout_percentage=dropout_percentage,
                                    layer_params=layer_params_this, dnl_epoch=dnl_epoch,
                                    opt_params=opt_params, dnl_batch_size=dnl_batch_size,
                                    dnl_learning_rate=dnl_learning_rate,
@@ -127,7 +127,7 @@ def train_relu(file_name_prefix='noprefix', file_folder='', max_step_size_magnit
                                    sampling_method=DIVIDE_AND_CONQUER, run_time_limit=time_limit))
             models.append(relu_ppo(batch_size=mini_batch_size, max_step_size_magnitude=max_step_size_magnitude,
                                    min_step_size_magnitude=min_step_size_magnitude,
-                                   params_per_epoch_divider=params_per_epoch_divider,
+                                   dropout_percentage=dropout_percentage,
                                    layer_params=layer_params_this, dnl_epoch=dnl_epoch,
                                    opt_params=opt_params, dnl_batch_size=dnl_batch_size,
                                    dnl_learning_rate=dnl_learning_rate,
@@ -224,7 +224,7 @@ def train_relu_dnl_knapsack(max_step_size_magnitude=0, min_step_size_magnitude=-
                            dnl_epoch=10, regression_epoch=30,
                            kfolds=None,
                            test_boolean=None, core_number=8, is_shuffle=True, layer_params=None,
-                           params_per_epoch_divider=1,
+                           dropout_percentage=10,
                            learning_rate=0.1, dnl_learning_rate=1,
                            dnl_batch_size=None, mini_batch_size=32, n_iter=5,
                             is_save=False):
@@ -241,7 +241,7 @@ def train_relu_dnl_knapsack(max_step_size_magnitude=0, min_step_size_magnitude=-
                 train_relu(dataset=dataset, kfold=kfold,
                                max_step_size_magnitude=max_step_size_magnitude,
                                min_step_size_magnitude=min_step_size_magnitude, layer_params=layer_params,
-                               params_per_epoch_divider=params_per_epoch_divider,
+                               dropout_percentage=dropout_percentage,
                                opt_params=opt_params, dnl_epoch=dnl_epoch, regression_epoch=regression_epoch,
                                is_shuffle=is_shuffle,
                                generate_weight=True, unit_weight=False, core_number=core_number,
@@ -256,14 +256,14 @@ def train_relu_dnl_knapsack(max_step_size_magnitude=0, min_step_size_magnitude=-
 if __name__ == "__main__":
     # capacities = [220]
     capacities  = [12]
-    layer_params= [1]
-    param_divider = 1
+    layer_params= [9,1]
+    dropout_percentage = 25
     kfolds = [2]
     test_boolean = [0, 1]
 
-    train_relu_dnl_knapsack(max_step_size_magnitude=0, min_step_size_magnitude=-1, capacities=capacities, dnl_epoch=6, layer_params=layer_params,
-                               params_per_epoch_divider=param_divider,
-                               regression_epoch=0, core_number=8, learning_rate=0.01, dnl_learning_rate=0.1, mini_batch_size=32,
+    train_relu_dnl_knapsack(max_step_size_magnitude=0, min_step_size_magnitude=-1, capacities=capacities, dnl_epoch=10, layer_params=layer_params,
+                               dropout_percentage=dropout_percentage,
+                               regression_epoch=20, core_number=8, learning_rate=0.01, dnl_learning_rate=0.1, mini_batch_size=32,
                                n_iter=1, is_save=True, kfolds=kfolds, dnl_batch_size=32, test_boolean=test_boolean)
 
     # noise_test_incremental(kfold=0, capacities=capacities, n_iter=100, noise_start=0, noise_end=1000, noise_step=10)

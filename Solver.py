@@ -12,54 +12,54 @@ from KnapsackSolver import compute_optimal_average_value_knapsack, \
 from Params import KNAPSACK, ICON_SCHEDULING_EASY
 
 
-def get_optimization_objective_for_samples(benchmark_X, benchmark_Y, pred_Y, benchmark_weights, opt_params,
-                                           sample_space,
-                                           mpPool=None):
-    """
-    Computes regrets of a single benchmark given a range of alpha samples
-    :param benchmark_X:
-    :param benchmark_Y:
-    :param benchmark_weights:
-    :param capacities:
-    :param alphas: vector of all alpha
-    :param const: regression constant
-    :param sample_space: range of alphas
-    :param k: indicator of the current alpha
-    :return:sampled_profits(nparray), sampled_predicted_profits(nparray)
-    """
-
-    sampled_profits = []
-    sampled_predicted_profits = []
-    # for tmp_alpha in sample_space:
-
-    # Compute predicted cost F_k for each alpha_k in searching space for the current k
-    # serial
-
-    for tmp_alpha in sample_space:
-        profit, predicted_profit = compute_objective_value_single_benchmarks(tmp_alpha, benchmark_X,
-                                                                             benchmark_Y,
-                                                                             benchmark_weights, pred_Y,
-
-                                                                             opt_params)
-        sampled_profits.append(profit)
-        sampled_predicted_profits.append(predicted_profit)
-
-    # parallel
-
-    # mypool = mp.Pool(processes=min(8, mp.cpu_count()))
-    # mypool = mpPool
-    #
-    # map_func = partial(compute_objective_value_single_benchmarks, benchmark_X=benchmark_X, Y=benchmark_Y,
-    #                    weights=benchmark_weights, C_k=C_k, opt_params=opt_params, k=k)
-    # results = mypool.map(map_func, sample_space)
-    #
-    # for profit, predicted_profit in results:
-    #     sampled_profits.append(profit)
-    #     sampled_predicted_profits.append(predicted_profit)
-
-    sampled_profits = np.array(sampled_profits)
-    sampled_predicted_profits = np.array(sampled_predicted_profits)
-    return sampled_profits, sampled_predicted_profits
+# def get_optimization_objective_for_samples(benchmark_X, benchmark_Y, pred_Y, benchmark_weights, opt_params,
+#                                            sample_space,
+#                                            mpPool=None):
+#     """
+#     Computes regrets of a single benchmark given a range of alpha samples
+#     :param benchmark_X:
+#     :param benchmark_Y:
+#     :param benchmark_weights:
+#     :param capacities:
+#     :param alphas: vector of all alpha
+#     :param const: regression constant
+#     :param sample_space: range of alphas
+#     :param k: indicator of the current alpha
+#     :return:sampled_profits(nparray), sampled_predicted_profits(nparray)
+#     """
+#
+#     sampled_profits = []
+#     sampled_predicted_profits = []
+#     # for tmp_alpha in sample_space:
+#
+#     # Compute predicted cost F_k for each alpha_k in searching space for the current k
+#     # serial
+#
+#     for tmp_alpha in sample_space:
+#         profit, predicted_profit = compute_objective_value_single_benchmarks(tmp_alpha, benchmark_X,
+#                                                                              benchmark_Y,
+#                                                                              benchmark_weights, pred_Y,
+#
+#                                                                              opt_params)
+#         sampled_profits.append(profit)
+#         sampled_predicted_profits.append(predicted_profit)
+#
+#     # parallel
+#
+#     # mypool = mp.Pool(processes=min(8, mp.cpu_count()))
+#     # mypool = mpPool
+#     #
+#     # map_func = partial(compute_objective_value_single_benchmarks, benchmark_X=benchmark_X, Y=benchmark_Y,
+#     #                    weights=benchmark_weights, C_k=C_k, opt_params=opt_params, k=k)
+#     # results = mypool.map(map_func, sample_space)
+#     #
+#     # for profit, predicted_profit in results:
+#     #     sampled_profits.append(profit)
+#     #     sampled_predicted_profits.append(predicted_profit)
+#
+#     sampled_profits = np.array(sampled_profits)
+#     sampled_predicted_profits = np.array(sampled_predicted_profits)
+#     return sampled_profits, sampled_predicted_profits
 
 
 def compute_objective_value_single_benchmarks(pred_Y, Y, weights,
