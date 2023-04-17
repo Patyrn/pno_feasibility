@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 
 def prepare_icon_dataset(kfold=0, is_shuffle=False):
     dataset = get_energy_data('energy_data.txt', generate_weight=True, unit_weight=False,
-                              kfold=kfold, noise_level=0, is_sorted=True)
+                              kfold=kfold, noise_level=0, is_sorted=False)
     # combine weights with X first
     # may need to split weights
 
@@ -303,8 +303,8 @@ def plot_impactful_sets_dnl(capacity, kfold, is_shuffle):
     #
     regret = relu_regret - dnl_regret
     sorted_regret = regret
-    # print("regret1",np.median(relu_regret) - np.median(dnl_regret))
-    # print("regret2",np.median(regret))
+    print("regret1",np.median(relu_regret) - np.median(dnl_regret))
+    print("regret2",np.median(regret))
     # print("relu_regret",np.median(relu_regret))
     # print("reg_regret",np.median(dnl_regret))
 
@@ -389,7 +389,7 @@ def plot_std_vs_regret(sorted_regret, sorted_preds_dnl,sorted_preds_relu, sorted
     plt.figure()
     counts, bins = np.histogram(sorted_regret)
     plt.stairs(counts, bins)
-    print('regret', np.mean(sorted_regret))
+    print('regret', np.median(sorted_regret))
     plt.show()
 
 def plot_problem_set(pred_dnl,pred_relu, Y, predicted_solution_dnl= None, predicted_solution_relu= None,solution= None):

@@ -525,7 +525,10 @@ class relu_ppo(nn.Module):
                     self.val_regrets.append(val_regret)
                     self.val_objs.append(np.median(val_obj))
                     if val_regret < best_val:
-                        best_model_state = copy.deepcopy(self)
+
+                        print("best model changed: {} -> {}".format(best_val,val_regret))
+                        best_val = val_regret
+                        torch.save(self, os.path.join(self.path, "dnl22.pth"))
 
                 if print_test:
                     # print('test')

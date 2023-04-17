@@ -257,13 +257,13 @@ if __name__ == "__main__":
     # capacities = [220]
     capacities  = [12]
     layer_params= [9,1]
-    dropout_percentage = 25
+    dropout_percentage = 0
     kfolds = [2]
     test_boolean = [0, 1]
 
-    train_relu_dnl_knapsack(max_step_size_magnitude=0, min_step_size_magnitude=-1, capacities=capacities, dnl_epoch=10, layer_params=layer_params,
+    train_relu_dnl_knapsack(max_step_size_magnitude=0, min_step_size_magnitude=-1, capacities=capacities, dnl_epoch=3, layer_params=layer_params,
                                dropout_percentage=dropout_percentage,
-                               regression_epoch=20, core_number=8, learning_rate=0.01, dnl_learning_rate=0.1, mini_batch_size=32,
+                               regression_epoch=0, core_number=8, learning_rate=0.01, dnl_learning_rate=0.1, mini_batch_size=32,
                                n_iter=1, is_save=True, kfolds=kfolds, dnl_batch_size=32, test_boolean=test_boolean)
 
     # noise_test_incremental(kfold=0, capacities=capacities, n_iter=100, noise_start=0, noise_end=1000, noise_step=10)
