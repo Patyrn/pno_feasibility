@@ -569,7 +569,6 @@ class relu_ppo(nn.Module):
         print('Training finished ')
         print("-----------------------")
         self.number_of_epochs = EPOCH
-        torch.save(best_model_state, os.path.join(self.path, "dnl22.pth"))
         if self.is_parallel:
             mypool.close()
 

@@ -416,7 +416,9 @@ class Sampler:
                         benchmark_POVS = np.hstack((interval.starting_point.predicted_profit, benchmark_POVS,
                                                     interval.ending_point.predicted_profit))
 
-                    if max(benchmark_TOVS) > profit:
+                    L2_loss = model.get_L2_loss(custom_layer_no=layer_no, custom_param_ind=param.param_ind, bias=bias)
+                    L2_loss = [model.L2_lambda * (L2_loss + sample ** 2) for sample in sample_space]
+                    if max(benchmark_TOVS- L2_loss) > profit:
                         index = np.argmax(benchmark_TOVS)
                         transition_point = TransitionPoint(x=sample_space[index], true_profit=benchmark_TOVS[index],
                                                            predicted_profit=benchmark_POVS[index])
