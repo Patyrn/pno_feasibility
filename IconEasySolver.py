@@ -87,7 +87,7 @@ def ICON_scheduling_relaxation(price, opt_params,
                                 U[f][r] for f in Tasks) <= MC[m][r])
 
     M.setObjective(sum((x[(f, m, t)] * P[f] * sum([price[t + i] for i in range(D[f])]) * q / 60) for f in Tasks
-                       for m in Machines for t in range(N - D[f] + 1)), GRB.MINIMIZE)
+                       for m in Machines for t in range(N - D[f] + 1)), GRB.MAXIMIZE)
 
     if timelimit:
         M.setParam('TimeLimit', timelimit)
@@ -369,15 +369,17 @@ def compute_sampled_alpha_icon_energy(pred_ys, benchmark_y, opt_params):
 
 
 def compute_optimal_average_value_icon_energy(Y, opt_params):
-    average_cost = np.zeros(len(Y))
+    objective_values = np.zeros(len(Y))
+    solutions = []
     index = range(len(Y))
     for i, benchmark_Y in zip(index, Y):
         benchmark_Y = benchmark_Y.reshape(-1).tolist()
 
         objVal, solver = ICON_scheduling(price=benchmark_Y, opt_params=opt_params)
         optimal_objective_value = calculate_energy_from_solver(solver, benchmark_Y)
-        average_cost[i] = optimal_objective_value
-    return average_cost
+        objective_values[i] = optimal_objective_value
+        solutions.append(solver)
+    return objective_values, solutions
 
 
 def compute_profit_icon_pred(pred_Y, Y, opt_params):
@@ -460,8 +462,8 @@ def get_icon_instance_params(instance_no=1, folder_path='data/icon_instances/eas
     # down[m] shut-down cost of server m
     # q time resolution
     # timelimit in seconds
-    folder_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    folder_path = os.path.join(folder_path, 'relu_dnl/data/icon_instances/easy')
+    parent_path = os.path.dirname(os.path.abspath(__file__))
+    folder_path = os.path.join(parent_path,folder_path)
     filename = 'instance' + str(instance_no) + '.txt'
     raw_file = read_file(filename=filename, folder_path=folder_path)
     header_length = 2

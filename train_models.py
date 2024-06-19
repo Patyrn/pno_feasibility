@@ -7,8 +7,13 @@ from EnergyDataUtil import get_energy_data
 from KnapsackSolver import get_opt_params_knapsack
 from ReLu_DNL.ReLu_DNL import relu_ppo
 from ReLu_DNL.Sampling_Methods import DIVIDE_AND_CONQUER, DIVIDE_AND_CONQUER_GREEDY, DIVIDE_AND_CONQUER_GREEDY_MERGED
+from SPO.ICON_Load1SPO import SPO_load1
+from dnl.Utils import get_train_test_split_SPO
+from SPO.Weighted_knapsack_spo import weighted_knapsack_SPO
 from Utils import get_train_test_split
 import multiprocessing as mp
+
+
 
 
 def train_relu(file_name_prefix='noprefix', file_folder='', max_step_size_magnitude=0,
@@ -104,7 +109,7 @@ def train_relu(file_name_prefix='noprefix', file_folder='', max_step_size_magnit
                                       dnl_learning_rate=dnl_learning_rate,
                                       is_parallel=True, is_update_bias=is_update_bias, L2_lambda=L2_Lambda,
                                       sampling_method=DIVIDE_AND_CONQUER, run_time_limit=time_limit, path=path)
-            baseline_model.fit_nn(X_train, Y_train, max_epochs=2)
+            baseline_model.fit_nn(X_train, Y_train, max_epochs=regression_epoch)
             baseline_test_regret,_, baseline_test_obj,_ = baseline_model.get_regret(test_X, test_Y, test_weights,
                                                                                 pool=mypool)
 
@@ -159,6 +164,12 @@ def train_relu(file_name_prefix='noprefix', file_folder='', max_step_size_magnit
                     print(model_method_names[i], "Test Running Time:", str(model.test_run_time) + "s\n")
                     file_name = file_name_prefix
                     model.get_MSE(test_MSE_X, test_MSE_Y)
+                    if is_save:
+                        print('Saving model {}'.format(model_method_names[i]))
+                        f_name = "regression_{}_c{}f{}l{}.pth".format(opt_params.get('solver'),opt_params.get('capacity')[0], kfold,"01")
+                        # model.save_regression_model(f_name)
+                        f_name = "dnl_noregress_{}_c{}f{}l{}.pth".format(opt_params.get('solver'),opt_params.get('capacity')[0], kfold,"01")
+                        model.save_dnl_model(f_name)
             print("----RESULTS----")
 
             for model, i in zip(models, range(NUMBER_OF_MODELS)):
@@ -176,6 +187,7 @@ def train_relu(file_name_prefix='noprefix', file_folder='', max_step_size_magnit
 
                     training_obj_values[baseline_regression, random_test_index] = model.training_obj_value[0]
 
+
             print("----END----")
 
             # Tests
@@ -183,6 +195,8 @@ def train_relu(file_name_prefix='noprefix', file_folder='', max_step_size_magnit
 
             regrets[baseline_regression, random_test_index] = baseline_test_regret
             test_MSES[baseline_regression, random_test_index] = baseline_mse
+
+
 
             # print('printing regret baseline = ' + str(baseline_test_regret) + ', printing MSE baseline = ' + str(
             #     baseline_mse))
@@ -250,20 +264,63 @@ def train_relu_dnl_knapsack(max_step_size_magnitude=0, min_step_size_magnitude=-
                                dnl_batch_size=dnl_batch_size, mini_batch_size=mini_batch_size, is_save=is_save)
 
 
-# def train_spo():
-#
+
+
+
+def train_spo_knapsack(capacities=None, is_shuffle=False, layer_params = None, NUMBER_OF_RANDOM_TESTS=1, kfolds=[0], n_iter=5,
+                      dest_folder="Tests/icon/Easy/kfolds/spo/", noise_level=0):
+    random.seed(42)
+    random_seeds = [random.randint(0, 100) for p in range(NUMBER_OF_RANDOM_TESTS)]
+    random_seed = random_seeds[0]
+    if capacities is None:
+        capacities = [12]
+    for capacity in capacities:
+        for kfold in kfolds:
+            dataset = get_energy_data('energy_data.txt', generate_weight=True, unit_weight=False, kfold=kfold,
+                                      noise_level=noise_level)
+            train_set_SPO, test_set_SPO = get_train_test_split_SPO(dataset, random_seed=random_seed, is_shuffle=is_shuffle)
+            layer_params_str = layer_params[0]
+            file_name_prefix = 'Iconknap_c' + str(capacity) + "k" + str(kfold) + "_SPO_l" + "".join(
+                ["0" + str(x) for x in layer_params_str]) + ".csv"
+
+            # print("baseline_regret", baseline_regret)
+            f_name = "spo_{}_c{}f{}l{}.pth".format("knap",capacity, kfold,"01")
+            weighted_knapsack_SPO(n_iter=n_iter, train_set=train_set_SPO, test_set=test_set_SPO, capacity=capacity,
+                                   layer_params=layer_params, dest_folder=dest_folder, save_model=True, f_name=f_name)
+
+def train_spo_icon(capacities=None, is_shuffle=False, layer_params = None, NUMBER_OF_RANDOM_TESTS=1, kfolds=[0], n_iter=5,
+                      dest_folder="Tests/icon/Easy/kfolds/spo/", noise_level=0):
+    random.seed(42)
+    random_seeds = [random.randint(0, 100) for p in range(NUMBER_OF_RANDOM_TESTS)]
+    random_seed = random_seeds[0]
+    if capacities is None:
+        capacities = [12]
+    for capacity in capacities:
+        for kfold in kfolds:
+            dataset = get_energy_data('energy_data.txt', generate_weight=True, unit_weight=True, kfold=kfold,
+                                      noise_level=noise_level)
+            train_set_SPO, test_set_SPO = get_train_test_split_SPO(dataset, random_seed=random_seed, is_shuffle=is_shuffle)
+            layer_params_str = layer_params[0]
+            file_name_prefix = 'Iconknap_c' + str(capacity) + "k" + str(kfold) + "_SPO_l" + "".join(
+                ["0" + str(x) for x in layer_params_str]) + ".csv"
+
+            # print("baseline_regret", baseline_regret)
+            f_name = "spo_{}_l{}f{}l{}.pth".format("icon",capacity, kfold,"01")
+            SPO_load1(n_iter=n_iter, train_set=train_set_SPO, test_set=test_set_SPO, capacity=capacity,
+                                   layer_params=layer_params, dest_folder=dest_folder, save_model=True, f_name=f_name)
 
 if __name__ == "__main__":
     # capacities = [220]
-    capacities  = [12]
-    layer_params= [9,1]
+    capacities  = [12,48,196,220]
+    layer_params= [1]
     dropout_percentage = 0
-    kfolds = [2]
+    kfolds = [0]
     test_boolean = [0, 1]
-
-    train_relu_dnl_knapsack(max_step_size_magnitude=0, min_step_size_magnitude=-1, capacities=capacities, dnl_epoch=3, layer_params=layer_params,
-                               dropout_percentage=dropout_percentage,
-                               regression_epoch=0, core_number=8, learning_rate=0.01, dnl_learning_rate=0.1, mini_batch_size=32,
-                               n_iter=1, is_save=True, kfolds=kfolds, dnl_batch_size=32, test_boolean=test_boolean)
-
+    is_shuffle = True
+    # train_relu_dnl_knapsack(max_step_size_magnitude=0, min_step_size_magnitude=-1, capacities=capacities, dnl_epoch=10, layer_params=layer_params,
+    #                            dropout_percentage=dropout_percentage,is_shuffle = is_shuffle,
+    #                            regression_epoch=0, core_number=8, learning_rate=0.01, dnl_learning_rate=0.1, mini_batch_size=32,
+    #                            n_iter=1, is_save=True, kfolds=kfolds, dnl_batch_size=-1, test_boolean=test_boolean)
+    layer_params = [[1]]
+    train_spo_knapsack (capacities=capacities,layer_params=layer_params, is_shuffle = is_shuffle, kfolds=kfolds, n_iter=1)
     # noise_test_incremental(kfold=0, capacities=capacities, n_iter=100, noise_start=0, noise_end=1000, noise_step=10)

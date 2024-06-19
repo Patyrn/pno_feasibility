@@ -217,7 +217,7 @@ def ICON_scheduling(price, opt_params,
                 M.addConstr(sum(sum(x[(f, m, t1)] for t1 in range(max(0, t - D[f] + 1), t + 1)) *
                                 U[f][r] for f in Tasks) <= MC[m][r])
     M.setObjective(sum((x[(f, m, t)] * P[f] * sum([price[t + i] for i in range(D[f])]) * q / 60) for f in Tasks
-                       for m in Machines for t in range(N - D[f] + 1)), GRB.MAXIMIZE)
+                       for m in Machines for t in range(N - D[f] + 1)), GRB.MINIMIZE)
     if timelimit:
         M.setParam('TimeLimit', timelimit)
     M.optimize()

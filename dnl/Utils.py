@@ -162,12 +162,12 @@ def get_train_test_split(dataset, random_seed=RANDOM_SEED, is_shuffle=False):
 
 def get_train_test_split_SPO(dataset, random_seed=RANDOM_SEED, is_shuffle=False):
     """
-    dataset is already seperated into benchmarks, split data but preserve benchmarks.
-    Splits the dataset into train and test sets. Also constructs the weight vector. currently we use unit weight but it can be changed in the future.
-    :param X: Features
-    :param Y: Outputs
-    :return: train_set(dictionary), test_set(dictionary)
-    """
+      dataset is already seperated into benchmarks, split data but preserve benchmarks.
+      Splits the dataset into train and test sets. Also constructs the weight vector. currently we use unit weight but it can be changed in the future.
+      :param X: Features
+      :param Y: Outputs
+      :return: train_set(dictionary), test_set(dictionary)
+      """
     benchmarks_X = dataset.get('benchmarks_X')
     benchmarks_Y = dataset.get('benchmarks_Y')
     benchmarks_weights = dataset.get('benchmarks_weights')
@@ -180,7 +180,7 @@ def get_train_test_split_SPO(dataset, random_seed=RANDOM_SEED, is_shuffle=False)
         random_state=random_seed)
 
     starting_index = 0
-    benchmarks_X_train = [np.vstack((np.ones(48) * starting_index + ind, benchmarks_X[index])) for ind, index in
+    benchmarks_X_train = [np.hstack((np.ones((48, 1)) * starting_index + ind, benchmarks_X[index])) for ind, index in
                           enumerate(benchmarks_X_train_index)]
     benchmarks_Y_train = [benchmarks_Y[index] for index in benchmarks_Y_train_index]
     benchmarks_weights_train = [benchmarks_weights[index] for index in benchmarks_X_train_index]
@@ -188,7 +188,7 @@ def get_train_test_split_SPO(dataset, random_seed=RANDOM_SEED, is_shuffle=False)
     starting_index = len(benchmarks_X_train)
     print('starting index', starting_index)
 
-    benchmarks_X_test = [np.vstack((np.ones(48) * starting_index + ind, benchmarks_X[index])) for ind, index in
+    benchmarks_X_test = [np.hstack((np.ones((48, 1)) * starting_index + ind, benchmarks_X[index])) for ind, index in
                          enumerate(benchmarks_X_test_index)]
     benchmarks_Y_test = [benchmarks_Y[index] for index in benchmarks_Y_test_index]
     benchmarks_weights_test = [benchmarks_weights[index] for index in benchmarks_Y_test_index]
@@ -201,15 +201,15 @@ def get_train_test_split_SPO(dataset, random_seed=RANDOM_SEED, is_shuffle=False)
     X_test = flatten_benchmarks(benchmarks_X_test)
     Y_test = flatten_benchmarks(benchmarks_Y_test)
     weights_test = flatten_benchmarks(benchmarks_weights_test)
-    train_set = {'X': X_train.T,
-                 'Y': Y_train.flatten().T,
+    train_set = {'X': X_train,
+                 'Y': Y_train.flatten(),
                  'benchmarks_X': benchmarks_X_train,
                  'benchmarks_Y': benchmarks_Y_train,
                  'benchmarks_weights': benchmarks_weights_train
                  }
 
-    test_set = {'X': X_test.T,
-                'Y': Y_test.flatten().T,
+    test_set = {'X': X_test,
+                'Y': Y_test.flatten(),
                 'benchmarks_X': benchmarks_X_test,
                 'benchmarks_Y': benchmarks_Y_test,
                 'benchmarks_weights': benchmarks_weights_test

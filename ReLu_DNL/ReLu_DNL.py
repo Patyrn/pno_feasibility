@@ -265,6 +265,9 @@ class relu_ppo(nn.Module):
                                                     min_step_size_magnitude=min_step_size_magnitude,
                                                     transition_point_selection=transition_point_selection, model=self)
 
+        self.regression_model = None
+        self.best_model = None
+
     def init_layers(self, layer_params):
         self.layers = nn.ModuleList()
         for i, layer_param in enumerate(layer_params[:-1]):
@@ -341,7 +344,8 @@ class relu_ppo(nn.Module):
             # if t % 100 == 99:
             #     # print('y',y,'y_pred',y_pred)
             #     print(t, loss.item())
-        torch.save(self, os.path.join(self.path, "regression.pth"))
+        self.regression_model = copy.deepcopy(self)
+        # torch.save(self, os.path.join(self.path, "regression.pth"))
 
     def get_L2_loss(self, custom_layer_no=None, custom_param_ind=None, bias=False):
         weight_sum = 0
@@ -528,7 +532,8 @@ class relu_ppo(nn.Module):
 
                         print("best model changed: {} -> {}".format(best_val,val_regret))
                         best_val = val_regret
-                        torch.save(self, os.path.join(self.path, "dnl22.pth"))
+                        self.best_model = copy.deepcopy(self)
+                        # torch.save(self, os.path.join(self.path, "dnl_knapsack_12.pth"))
 
                 if print_test:
                     # print('test')
@@ -730,13 +735,17 @@ class relu_ppo(nn.Module):
                 # print('best transition point profit: ', benchmark_best_transition_point.true_profit)
                 # print("before:",self.weight.data[param_ind], "transition point:", benchmark_best_transition_point.x)
                 # print("gradient: {}".format(gradient))
+
+                regret_diff = profit - prev_profit
                 if param.bias:
                     with torch.no_grad():
-                        gradient = benchmark_best_transition_point.x - self.get_layer(layer_no).bias.data[
-                            param.param_ind].detach().numpy().astype(float)
+                        gradient = (benchmark_best_transition_point.x - self.get_layer(layer_no).bias.data[
+                            param.param_ind].detach().numpy().astype(float))
                         if gradient != 0:
                             self.get_layer(layer_no).bias.data[param.param_ind] = self.get_layer(layer_no).bias.data[
-                                                                                      param.param_ind] + self.dnl_learning_rate * gradient
+                                                                                      param.param_ind] + self.dnl_learning_rate * gradient * (
+                                                                                              1 / (1 + np.exp(
+                                                                                          -regret_diff)))
 
                 else:
                     with torch.no_grad():
@@ -745,7 +754,25 @@ class relu_ppo(nn.Module):
                         if gradient != 0:
                             self.get_layer(layer_no).weight.data[param.param_ind] = \
                             self.get_layer(layer_no).weight.data[
-                                param.param_ind] + self.dnl_learning_rate * gradient
+                                param.param_ind] + self.dnl_learning_rate * gradient * (1 / (1 + np.exp(-regret_diff)))
+
+
+                # if param.bias:
+                #     with torch.no_grad():
+                #         gradient = benchmark_best_transition_point.x - self.get_layer(layer_no).bias.data[
+                #             param.param_ind].detach().numpy().astype(float)
+                #         if gradient != 0:
+                #             self.get_layer(layer_no).bias.data[param.param_ind] = self.get_layer(layer_no).bias.data[
+                #                                                                       param.param_ind] + self.dnl_learning_rate * gradient
+                #
+                # else:
+                #     with torch.no_grad():
+                #         gradient = benchmark_best_transition_point.x - self.get_layer(layer_no).weight.data[
+                #             param.param_ind].detach().numpy().astype(float)
+                #         if gradient != 0:
+                #             self.get_layer(layer_no).weight.data[param.param_ind] = \
+                #             self.get_layer(layer_no).weight.data[
+                #                 param.param_ind] + self.dnl_learning_rate * gradient
 
                     # print("after:",self.weight.data[param_ind])
                     # print("gradient: {}".format(gradient))
@@ -969,6 +996,15 @@ class relu_ppo(nn.Module):
             self.min_step_size_magnitude) + file_type
         return file_name
 
+    def save_regression_model(self, f_name = None):
+        if f_name is None:
+            f_name = "regression.pth"
+        torch.save(self.regression_model, os.path.join(self.path, f_name))
+
+    def save_dnl_model(self, f_name=None):
+        if f_name is None:
+            f_name = "dnl.pth"
+        torch.save(self.best_model, os.path.join(self.path, f_name))
 
 def round_list(arrs, sig_number):
     rounded_list = [[round(elem, sig_number) for elem in arr] for arr in arrs]
